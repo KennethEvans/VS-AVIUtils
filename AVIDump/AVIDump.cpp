@@ -7,7 +7,6 @@
 
 #define PATH_MAX _MAX_PATH
 #define OUTPUT_FILE "AVIDump.txt"
-#define USE_FILE 0
 #define DEBUG 0
 
 // Function prototypes
@@ -162,51 +161,49 @@ CLEANUP:
 	return 1;
 }
 
-int parseCommand(int argc, char **argv)
-{
+int parseCommand(int argc, char **argv) {
 	for(int i=1; i < argc; i++) {
-		if (argv[i][0] == '-') {
+		if(argv[i][0] == '-') {
 			switch(argv[i][1]) {
 #if 0
-		case 's':
-			doServer=1;
-			serverName=argv[++i];
-			break;
+			case 's':
+				doServer=1;
+				serverName=argv[++i];
+				break;
 #endif
-		case 'h':
-			usage();
-			return APP_OK;
-		case 'f':
-			useFile = 1;
-			break;
-		default:
-			fprintf(stderr,"\n\nInvalid option: %s\n",argv[i]);
-			usage();
-			return APP_ERROR;
-			}
-		} else {
-			if(!aviFileSpecified) {
-				strcpy(aviFileName,argv[i]);
-				aviFileSpecified=1;
-			} else {
-				errMsg("\n\nInvalid option: %s\n",argv[i]);
+			case 'h':
+				usage();
+				return APP_OK;
+			case 'f':
+				useFile = 1;
+				break;
+			default:
+				fprintf(stderr,"\n\nInvalid option: %s\n",argv[i]);
 				usage();
 				return APP_ERROR;
 			}
+		} else if(!aviFileSpecified) {
+			strcpy(aviFileName,argv[i]);
+			aviFileSpecified=1;
+		} else {
+			errMsg("\n\nInvalid option: %s\n",argv[i]);
+			usage();
+			return APP_ERROR;
 		}
 	}
 	return APP_OK;
 }
 
-void usage(void)
-{
+void usage(void) {
 	printf(
 		"\nUsage: AVIDump [Options] filename\n"
 		"  Prints AVI file info\n"
 		"\n"
 		"  Options:\n"
 		"    filename     Name of an AVI file\n"
+		"    -f           Output to file [filename.%s]\n"
 		"    -h help      This message\n"
+		, OUTPUT_FILE
 		);
 }
 

@@ -42,7 +42,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="&quot;C:\Users\evans\Documents\Visual Studio Projects\AVIUtils\AVIDump&quot;"
+				AdditionalIncludeDirectories="&quot;$(SolutionDir)\AVIDump&quot;"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -66,7 +66,7 @@
 				AdditionalDependencies="Vfw32.lib AVIUtils.obj"
 				OutputFile="$(OutDir)/AVIConvert.exe"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="&quot;C:\Users\evans\Documents\Visual Studio Projects\AVIUtils\AVIDump\Debug&quot;"
+				AdditionalLibraryDirectories="&quot;$(SolutionDir)\AVIDump\Debug&quot;"
 				GenerateDebugInformation="true"
 				ProgramDatabaseFile="$(OutDir)/AVIConvert.pdb"
 				SubSystem="1"
@@ -121,7 +121,7 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="&quot;C:\Users\evans\Documents\Visual Studio Projects\AVIUtils\AVIDump&quot;"
+				AdditionalIncludeDirectories="&quot;$(SolutionDir)\AVIDump&quot;"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS"
 				RuntimeLibrary="0"
 				UsePrecompiledHeader="2"
@@ -143,7 +143,7 @@
 				AdditionalDependencies="Vfw32.lib AVIUtils.obj"
 				OutputFile="$(OutDir)/AVIConvert.exe"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="&quot;C:\Users\evans\Documents\Visual Studio Projects\AVIConvert\Release&quot;"
+				AdditionalLibraryDirectories="&quot;$(SolutionDir)\AVIDump\Release&quot;"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"

@@ -181,15 +181,15 @@
 				>
 			</File>
 			<File
-				RelativePath=".\CopyStream.cpp"
-				>
-			</File>
-			<File
 				RelativePath=".\Example1.cpp"
 				>
 			</File>
 			<File
 				RelativePath=".\JunkTest.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\SaveSmall.cpp"
 				>
 			</File>
 			<File

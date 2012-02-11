@@ -325,7 +325,7 @@ HRESULT copyStream(PAVISTREAM pStreamIn) {
 	// Set the start frame
 	DWORD startFrame = streamInfoOut.dwStart;
 	DWORD nKeyFrames = 0;
-	DWORD framesProcessed = 0;
+	DWORD nFramesProcessed = 0;
 	while(hr == AVIERR_OK) {
 		hr = AVIStreamRead(pStreamIn, nFrames, startFrame, NULL, 0, &frameSize, NULL);
 		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {

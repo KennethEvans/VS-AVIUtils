@@ -5,6 +5,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVIConvert", "AVIConvert\AV
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVIDump", "AVIDump\AVIDump.vcproj", "{48130B96-1D86-4B30-A353-55D414509F12}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVITest", "AVITest\AVITest.vcproj", "{9A89E996-4662-43B4-905F-F75D6F8DA36F}"
+EndProject
 Global
 	GlobalSection(SubversionScc) = preSolution
 		Svn-Managed = True
@@ -23,6 +25,10 @@ Global
 		{48130B96-1D86-4B30-A353-55D414509F12}.Debug|Win32.Build.0 = Debug|Win32
 		{48130B96-1D86-4B30-A353-55D414509F12}.Release|Win32.ActiveCfg = Release|Win32
 		{48130B96-1D86-4B30-A353-55D414509F12}.Release|Win32.Build.0 = Release|Win32
+		{9A89E996-4662-43B4-905F-F75D6F8DA36F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{9A89E996-4662-43B4-905F-F75D6F8DA36F}.Debug|Win32.Build.0 = Debug|Win32
+		{9A89E996-4662-43B4-905F-F75D6F8DA36F}.Release|Win32.ActiveCfg = Release|Win32
+		{9A89E996-4662-43B4-905F-F75D6F8DA36F}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -24,11 +24,11 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	HRESULT hr; 
 	PAVIFILE pFile=NULL; 
 	BOOL libOpened=FALSE;
-	AVIFILEINFO aviInfo;
-	AVISTREAMINFO avis; 
-	PAVISTREAM *gapavi=NULL;
+	AVIFILEINFO fileInfo;
+	AVISTREAMINFO streamInfo; 
+	PAVISTREAM *pStreams=NULL;
 	int i;
-	int nStreams=0, gcpavi=0;
+	int nStreams=0;
 	char *fileName = NULL;
 	FILE *out = NULL;
 
@@ -76,50 +76,50 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	}
 
 	// Get info
-	hr=AVIFileInfo(pFile,&aviInfo,sizeof(aviInfo));
+	hr=AVIFileInfo(pFile,&fileInfo,sizeof(fileInfo));
 	if(hr != AVIERR_OK) { 
 		errMsg("Unable to get info from %s [Error 0x%08x %s]",
 			aviFileName, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
-	nStreams=aviInfo.dwStreams;
-	printFileInfo(aviInfo);
+	nStreams=fileInfo.dwStreams;
+	printFileInfo(fileInfo);
 
 	// Open the streams
 	if(nStreams <= 0) {
 		errMsg("No streams in %s",aviFileName); 
 		goto ABORT;
 	}
-	gapavi=new PAVISTREAM[nStreams];
-	if(!gapavi) {
+	pStreams=new PAVISTREAM[nStreams];
+	if(!pStreams) {
 		errMsg("Cannot allocate streams array"); 
 		goto ABORT;
 	}
 	for (i = 0; i < nStreams; i++) {
 		printf("\nStream %d:\n",i);
-		gapavi[i] = NULL;
+		pStreams[i] = NULL;
 		// Do in reverse order, getting all fcc types
-		hr=AVIFileGetStream(pFile,&gapavi[i],0L,i - gcpavi) ;
-		if(hr != AVIERR_OK || gapavi[i] == NULL) {
+		hr=AVIFileGetStream(pFile,&pStreams[i],0L,i) ;
+		if(hr != AVIERR_OK || pStreams[i] == NULL) {
 			errMsg("Cannot open stream %d",i); 
 			continue; 
 		}
 		// Get stream info
-		hr=AVIStreamInfo(gapavi[i],&avis,sizeof(avis)); 
+		hr=AVIStreamInfo(pStreams[i],&streamInfo,sizeof(streamInfo)); 
 		if(hr != AVIERR_OK) { 
 			errMsg("Unable to get stream info for stream %d",i); 
 			goto ABORT; 
 		}
-		printStreamInfo(avis);
+		printStreamInfo(streamInfo);
 
 		// Handle specific types
-		if (avis.fccType == streamtypeVIDEO) { 
-			getBitmapInfo(gapavi[i]);
-		} else if (avis.fccType == streamtypeAUDIO) { 
+		if (streamInfo.fccType == streamtypeVIDEO) { 
+			getBitmapInfo(pStreams[i]);
+		} else if (streamInfo.fccType == streamtypeAUDIO) { 
 			continue;
-		}  else if (avis.fccType == streamtypeMIDI) {  
+		}  else if (streamInfo.fccType == streamtypeMIDI) {  
 			continue;
-		}  else if (avis.fccType == streamtypeTEXT) {  
+		}  else if (streamInfo.fccType == streamtypeTEXT) {  
 			continue;
 		} else {
 			continue;
@@ -153,7 +153,7 @@ CLEANUP:
 	// Release AVIFile library 
 	if(libOpened) AVIFileExit();
 	// Free space
-	if(gapavi) delete [] gapavi;
+	if(pStreams) delete [] pStreams;
 	if(fileName) delete [] fileName;
 
 	// Wait for a prompt so the console doesn't go away
@@ -210,9 +210,9 @@ void usage(void)
 		);
 }
 
-void getBitmapInfo(PAVISTREAM gapavi) {
+void getBitmapInfo(PAVISTREAM pStream) {
 	printf("\n  BITMAPINFOHEADER:\n");
-	if(!gapavi) {
+	if(!pStream) {
 		errMsg("PAVISTREAM input is null"); 
 		return; 
 	}
@@ -225,7 +225,7 @@ void getBitmapInfo(PAVISTREAM gapavi) {
 	// First determine biSize
 	// Not really necessary since we allocated a full BITMAPINFO anyway
 	// The returned size should be less than or equal to the size of BITMAPINFO
-	hr = AVIStreamReadFormat(gapavi, 0, NULL, &biSize);
+	hr = AVIStreamReadFormat(pStream, 0, NULL, &biSize);
 #if DEBUG
 	printf("DEBUG: biSize=%d *pBmi=%d\n", biSize, sizeof(*pBmi));
 	printf("DEBUG: WORD=%d DWORD=%d LONG=%d\n",
@@ -234,7 +234,7 @@ void getBitmapInfo(PAVISTREAM gapavi) {
 		sizeof(BITMAPINFO), sizeof(BITMAPINFOHEADER), sizeof(RGBTRIPLE));
 #endif
 	// Then actually read it
-	hr = AVIStreamReadFormat(gapavi, 0, pBmi, &biSize);
+	hr = AVIStreamReadFormat(pStream, 0, pBmi, &biSize);
 	if(hr != AVIERR_OK) {
 		errMsg("Cannot get BITMAPINFO [Error 0x%08x %s]", hr, getErrorCode(hr)); 
 		return; 

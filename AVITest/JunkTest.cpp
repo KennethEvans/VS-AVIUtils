@@ -8,8 +8,8 @@ CRect and CSize were replaced by SIZE and RECT
 
 void JunkTest() {
 	HRESULT hr;
-	PAVIFILE avi;
-	PAVISTREAM video;
+	PAVIFILE pFile;
+	PAVISTREAM pVideoStream;
 
 	SIZE sz;
 	sz.cx = 320;
@@ -44,16 +44,26 @@ void JunkTest() {
 	bi.biClrImportant    = 0;
 
 	AVIFileInit();
-	hr = AVIFileOpen( &avi, OUT_FILE_NAME, OF_WRITE | OF_CREATE, NULL );
-	hr = AVIFileCreateStream( avi, &video, &vidinfo );
-	hr = AVIStreamSetFormat( video, 0, &bi, sizeof(bi) );
+	hr = AVIFileOpen( &pFile, OUT_FILE_NAME, OF_WRITE | OF_CREATE, NULL );
+	if(hr != AVIERR_OK) {
+		printf("AVIFileOpen failed\n");
+	}
+	hr = AVIFileCreateStream( pFile, &pVideoStream, &vidinfo );
+	if(hr != AVIERR_OK) {
+		printf("AVIFileCreateStream failed\n");
+	}
+	hr = AVIStreamSetFormat( pVideoStream, 0, &bi, sizeof(bi) );
+	if(hr != AVIERR_OK) {
+		printf("AVIStreamSetFormat failed\n");
+	}
 
 	int nFrame = 0;
 	for ( int i = 0; i < 30; i++ ) {
 		BYTE* pFrame = new BYTE[sz.cx*sz.cy*3];
 		int nIdx = 0;
-		for ( int y = 0; y < sz.cy/4; y++ )
-			for ( int x = 0; x < sz.cx/4; x++ ) {
+		int x, y;
+		for (y = 0; y < sz.cy/4; y++)
+			for (x = 0; x < sz.cx/4; x++) {
 				// draw one solid color 4x4 block
 				pFrame[nIdx++] = 0;
 				pFrame[nIdx++] = 0;
@@ -64,12 +74,16 @@ void JunkTest() {
 			}
 			pFrame[nIdx++] = 0;  // end of blocks
 			pFrame[nIdx++] = 0;
-			hr = AVIStreamWrite( video, nFrame++, 1, pFrame, nIdx, AVIIF_KEYFRAME, NULL, NULL ); // all keyframes
+			hr = AVIStreamWrite( pVideoStream, nFrame++, 1, pFrame, nIdx,
+				AVIIF_KEYFRAME, NULL, NULL ); // all keyframes
+			if(hr != AVIERR_OK) {
+				printf("AVIStreamWrite failed for y=%d, x=%d\n", y, x);
+			}
 			delete [] pFrame;
 	}
 
-	AVIStreamRelease( video ); 
-	AVIFileRelease( avi );
+	AVIStreamRelease( pVideoStream ); 
+	AVIFileRelease( pFile );
 	AVIFileExit();
 
 	printf("Wrote %s\n", OUT_FILE_NAME);

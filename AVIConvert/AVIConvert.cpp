@@ -11,8 +11,8 @@
 // Function prototypes
 int parseCommand(int argc, char **argv);
 void usage(void);
-HRESULT copyStream(PAVISTREAM pAvi);
-HRESULT convertVideo(PAVISTREAM gapavi);
+HRESULT copyStream(PAVISTREAM pStreamIn);
+HRESULT convertVideo(PAVISTREAM pStreamIn);
 
 // Global variables
 char aviFileName1[PATH_MAX];
@@ -27,13 +27,13 @@ int _tmain(int argc, _TCHAR* argv[])
 {
 	HRESULT hr; 
 	BOOL libOpened=FALSE;
-	AVIFILEINFO aviInfo;
-	AVISTREAMINFO avis; 
+	AVIFILEINFO fileInfo;
+	AVISTREAMINFO streamInfo; 
 #if 0
 	double sps,ssps,length,slength;
 #endif
 	int i;
-	int nStreams=0,gcpavi=0;
+	int nStreams=0;
 
 	// Title
 	printf("\nAVIDump\n");
@@ -66,16 +66,16 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	// Get source info
-	hr=AVIFileInfo(pFile1,&aviInfo,sizeof(aviInfo));
+	hr=AVIFileInfo(pFile1,&fileInfo,sizeof(fileInfo));
 	if(hr != 0) { 
 		errMsg("Unable to get info from %s [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
-	nStreams=aviInfo.dwStreams;
+	nStreams=fileInfo.dwStreams;
 
-	// Open destination file (create new one)
-	hr=AVIFileOpen(&pFile2, aviFileName2, OF_CREATE, 0L);
+	// Open destination file
+	hr=AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
 	if(hr != 0) { 
 		errMsg("Unable to open %s [Error 0x%08x %s]",
 			aviFileName2, hr, getErrorCode(hr)); 
@@ -83,7 +83,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	printf("\nInput: %s\n\n", aviFileName1);
-	printFileInfo(aviInfo);
+	printFileInfo(fileInfo);
 
 	// Open the streams
 	if(nStreams <= 0) {
@@ -102,20 +102,20 @@ int _tmain(int argc, _TCHAR* argv[])
 	for (i = 0; i < nStreams; i++) {
 		printf("\nStream %d:\n",i);
 		gapavi[i] = NULL; 
-		hr=AVIFileGetStream(pFile1,&gapavi[i],0L,i - gcpavi) ;
+		hr=AVIFileGetStream(pFile1,&gapavi[i],0L,i) ;
 		if(hr != AVIERR_OK || gapavi[i] == NULL) {
 			errMsg("Cannot open stream %d",i); 
 			continue; 
 		}
 		// Get stream info
-		hr=AVIStreamInfo(gapavi[i],&avis,sizeof(avis)); 
+		hr=AVIStreamInfo(gapavi[i],&streamInfo,sizeof(streamInfo)); 
 		if(hr != 0) { 
 			errMsg("Unable to get stream info for stream %d",i); 
 			goto ABORT; 
 		}
-		printStreamInfo(avis);
+		printStreamInfo(streamInfo);
 
-		if (avis.fccType == streamtypeVIDEO) { 
+		if (streamInfo.fccType == streamtypeVIDEO) { 
 			printf("\n  Processing VIDEO\n");
 			//hr = convertVideo(gapavi[i]);
 			hr = copyStream(gapavi[i]);
@@ -125,7 +125,7 @@ int _tmain(int argc, _TCHAR* argv[])
 				goto ABORT; 
 			}
 			continue;
-		} else if (avis.fccType == streamtypeAUDIO) { 
+		} else if (streamInfo.fccType == streamtypeAUDIO) { 
 			printf("\n  Processing AUDIO\n");
 			hr = copyStream(gapavi[i]);
 			if(hr != AVIERR_OK) {
@@ -133,7 +133,7 @@ int _tmain(int argc, _TCHAR* argv[])
 				goto ABORT; 
 			}
 			continue;
-		}  else if (avis.fccType == streamtypeMIDI) {  
+		}  else if (streamInfo.fccType == streamtypeMIDI) {  
 			printf("\n  Processing MIDI\n");
 			hr = copyStream(gapavi[i]);
 			if(hr != AVIERR_OK) {
@@ -141,7 +141,7 @@ int _tmain(int argc, _TCHAR* argv[])
 				goto ABORT; 
 			}
 			continue;
-		}  else if (avis.fccType == streamtypeTEXT) {  
+		}  else if (streamInfo.fccType == streamtypeTEXT) {  
 			printf("\n  Processing TEXT\n");
 			hr = copyStream(gapavi[i]);
 			if(hr != AVIERR_OK) {
@@ -150,13 +150,13 @@ int _tmain(int argc, _TCHAR* argv[])
 			}
 			continue;
 		} else {
-			printf("\n  Processing unknown fccType [%d]\n",avis.fccType);
+			printf("\n  Processing unknown fccType [%d]\n",streamInfo.fccType);
 			hr = copyStream(gapavi[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
 			}
-			printf("  Unknown fccType [%d]\n",avis.fccType);
+			printf("  Unknown fccType [%d]\n",streamInfo.fccType);
 			continue;
 		}
 	}
@@ -255,22 +255,24 @@ void usage(void)
 		);
 }
 
-HRESULT copyStream(PAVISTREAM pAvi) {
-	if(!pAvi) {
+HRESULT copyStream(PAVISTREAM pStreamIn) {
+	if(!pStreamIn) {
 		errMsg("PAVISTREAM input is null"); 
 		return AVIERR_BADPARAM; 
 	}
 
 	HRESULT hrReturnVal = AVIERR_OK;
 	HRESULT hr;
-	PAVISTREAM pAviOut;
-	AVISTREAMINFO avisOut;
-	ZeroMemory(&avisOut, sizeof(avisOut));
+	PAVISTREAM pStreamOut;
+	AVISTREAMINFO streamInfoOut;
+	ZeroMemory(&streamInfoOut, sizeof(streamInfoOut));
+	LONG startFrame = 0;
+	LONG nKeyFrames = 0;
 
 	// Get the format
 	char *frameFormat = NULL;
 	LONG frameFormatSize = 0;
-	hr = AVIStreamReadFormat(pAvi, 0, NULL, &frameFormatSize);
+	hr = AVIStreamReadFormat(pStreamIn, 0, NULL, &frameFormatSize);
 	if(hr != AVIERR_OK) {
 		errMsg("Cannot read format size [Error 0x%08x %s]",
 			hr, getErrorCode(hr)); 
@@ -278,7 +280,7 @@ HRESULT copyStream(PAVISTREAM pAvi) {
 		goto CLEANUP;
 	}
 	frameFormat = new char[frameFormatSize];
-	hr = AVIStreamReadFormat(pAvi, 0,
+	hr = AVIStreamReadFormat(pStreamIn, 0,
 		frameFormat, &frameFormatSize);
 	if(hr != AVIERR_OK) {
 		errMsg("Cannot read format [Error 0x%08x %s]",
@@ -288,7 +290,7 @@ HRESULT copyStream(PAVISTREAM pAvi) {
 	}
 
 	// Create the stream
-	hr = AVIFileCreateStream(pFile2, &pAviOut, &avisOut);
+	hr = AVIFileCreateStream(pFile2, &pStreamOut, &streamInfoOut);
 	if(hr != AVIERR_OK) {
 		errMsg("Cannot create stream [Error 0x%08x %s]",
 			hr, getErrorCode(hr)); 
@@ -297,7 +299,7 @@ HRESULT copyStream(PAVISTREAM pAvi) {
 	}
 
 	// Set the format
-	hr = AVIStreamSetFormat(pAviOut, 0, frameFormat, frameFormatSize);
+	hr = AVIStreamSetFormat(pStreamOut, 0, frameFormat, frameFormatSize);
 	if(hr != AVIERR_OK) {
 		errMsg("Cannot set format [Error 0x%08x %s]",
 			hr, getErrorCode(hr)); 
@@ -312,13 +314,16 @@ HRESULT copyStream(PAVISTREAM pAvi) {
 		sizeof(WAVEFORMAT), sizeof(WAVEFORMATEX));
 #endif
 
+	// Handle startFrame for video
+
+
 	// Loop over the frames
 	char *frame = NULL;
 	LONG frameSize = 0;
 	LONG n = 1;
 	hr = AVIERR_OK;
 	while(hr == AVIERR_OK) {
-		hr = AVIStreamRead(pAvi, n, 1, NULL, 0, &frameSize, NULL);
+		hr = AVIStreamRead(pStreamIn, n, startFrame, NULL, 0, &frameSize, NULL);
 		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {
 			errMsg("Error reading stream size [Error 0x%08x %s]",
 				hr, getErrorCode(hr)); 
@@ -327,36 +332,37 @@ HRESULT copyStream(PAVISTREAM pAvi) {
 			break;
 		}
 		frame = new char[frameSize];
-		hr = AVIStreamRead(pAvi, n, 1, frame, frameSize, NULL, NULL);
+		hr = AVIStreamRead(pStreamIn, n, 1, frame, frameSize, NULL, NULL);
 		if(hr != AVIERR_OK) {
 			errMsg("Error reading stream [Error 0x%08x %s]",
 				hr, getErrorCode(hr)); 
 			hrReturnVal = hr;
 			goto CLEANUP;
 		}
-		if(AVIStreamIsKeyFrame(pAvi, n))		    {
-			AVIStreamWrite(pAviOut, n, 1, frame, frameSize,
+		if(AVIStreamIsKeyFrame(pStreamIn, n)) {
+			nKeyFrames++;
+			AVIStreamWrite(pStreamOut, n, 1, frame, frameSize,
 				AVIIF_KEYFRAME, NULL, NULL);
 		} else  {
-			AVIStreamWrite(pAviOut, n, 1, frame, frameSize,
+			AVIStreamWrite(pStreamOut, n, 1, frame, frameSize,
 				0, NULL, NULL);
 		}
 		delete [] frame;
 		frame = NULL;
 		n++;
 	}
-	printf("  %d frames written\n", n);
+	printf("  %d frames written, %d key frames\n", n, nKeyFrames);
 
 CLEANUP:
-	AVIStreamRelease(pAviOut);
+	AVIStreamRelease(pStreamOut);
 	if(frameFormat) delete [] frameFormat;
 	if(frame) delete [] frame;
 
 	return hrReturnVal;
 }
 
-HRESULT convertVideo(PAVISTREAM pAvi) {
-	if(!pAvi) {
+HRESULT convertVideo(PAVISTREAM pStreamIn) {
+	if(!pStreamIn) {
 		errMsg("PAVISTREAM input is null"); 
 		return AVIERR_BADPARAM; 
 	}
@@ -367,7 +373,7 @@ HRESULT convertVideo(PAVISTREAM pAvi) {
 	BITMAPINFO bmi;
 	long biSize = sizeof(bmi);
 	ZeroMemory(&bmi, biSize);
-	hr = AVIStreamReadFormat(pAvi, 0, &bmi, &biSize);
+	hr = AVIStreamReadFormat(pStreamIn, 0, &bmi, &biSize);
 	if(hr != AVIERR_OK) {
 		errMsg("Cannot get BITMAPINFO [Error 0x%08x %s]", hr, getErrorCode(hr)); 
 		return hr; 

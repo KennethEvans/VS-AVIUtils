@@ -73,6 +73,8 @@ int _tmain(int argc, _TCHAR* argv[])
 		goto ABORT; 
 	}
 	nStreams=fileInfo.dwStreams;
+	printf("\nInput: %s\n\n", aviFileName1);
+	printFileInfo(fileInfo);
 
 	// Open destination file
 	hr=AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
@@ -81,9 +83,6 @@ int _tmain(int argc, _TCHAR* argv[])
 			aviFileName2, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
-
-	printf("\nInput: %s\n\n", aviFileName1);
-	printFileInfo(fileInfo);
 
 	// Open the streams
 	if(nStreams <= 0) {
@@ -160,25 +159,29 @@ int _tmain(int argc, _TCHAR* argv[])
 			continue;
 		}
 	}
-
-	AVIFILEINFO aviInfo2;	
-	hr=AVIFileInfo(pFile2,&aviInfo2,sizeof(aviInfo2));
-	if(hr != 0) { 
-		errMsg("Unable to get info from %s [Error 0x%08x %s]",
-			aviFileName2, hr, getErrorCode(hr)); 
-		goto ABORT; 
-	}
-
-	printf("\nOutput: %s\n\n", aviFileName2);
-	printFileInfo(aviInfo2);
-
 	goto END;
 
 END:
 	// Normal exit
+#if 1
+	printf("\nBefore AVIFileRelease:\n");
+	printFileInfo(pFile2);
+	printf("\n");
+	printAudioInfo(pFile2);
+#endif
+
 	// Close files
 	if(pFile1) AVIFileRelease(pFile1);
 	if(pFile2) AVIFileRelease(pFile2);
+
+#if 0
+	// Gets get a memory error
+	printf("\nAfter AVIFileRelease:\n");
+	printFileInfo(pFile2);
+	printf("\n");
+	printAudioInfo(pFile2);
+#endif
+
 	// Release AVIFile library 
 	if(libOpened) AVIFileExit();
 	// Free space
@@ -251,6 +254,56 @@ void usage(void) {
 		);
 }
 
+HRESULT convertVideo(PAVISTREAM pStreamIn) {
+	if(!pStreamIn) {
+		errMsg("PAVISTREAM input is null"); 
+		return AVIERR_BADPARAM; 
+	}
+
+	HRESULT hr;
+	DWORD res;
+	HIC hic;
+	BITMAPINFO bmi;
+	long biSize = sizeof(bmi);
+	ZeroMemory(&bmi, biSize);
+	hr = AVIStreamReadFormat(pStreamIn, 0, &bmi, &biSize);
+	if(hr != AVIERR_OK) {
+		errMsg("Cannot get BITMAPINFO [Error 0x%08x %s]", hr, getErrorCode(hr)); 
+		return hr; 
+	}
+
+	// Determine compression
+	BITMAPINFOHEADER header = bmi.bmiHeader;
+	printBmiHeaderInfo("    ", header);
+	DWORD biCompression = header.biCompression;
+	printf("  Compression: ");
+	printFourCcCode(biCompression, "\n");
+
+	// Open the decompressor
+	hic = ICDecompressOpen(ICTYPE_VIDEO, biCompression, &header, NULL);
+	if(hic) {
+		printf("  ICDecompressOpen successful\n");
+	} else {
+		printf("  ICDecompressOpen unsuccessful\n");
+		goto CLEANUP;
+	}
+
+	// Get the output format
+	BITMAPINFO bmiOut;
+	res = ICDecompressGetFormat(hic, &bmi, &bmiOut);
+	if(res != ICERR_OK) {
+		printf("Default output format not available\n");
+		goto CLEANUP;
+	} else {
+		printf("  Default output format:\n");
+		printBmiHeaderInfo("    ", bmiOut.bmiHeader);
+	}
+
+CLEANUP:
+	ICClose(hic);
+	return AVIERR_OK;
+}
+
 HRESULT copyStream(PAVISTREAM pStreamIn) {
 	if(!pStreamIn) {
 		errMsg("PAVISTREAM input is null"); 
@@ -320,17 +373,23 @@ HRESULT copyStream(PAVISTREAM pStreamIn) {
 	// Loop over the frames
 	char *frame = NULL;
 	LONG frameSize = 0;
-	LONG nFrames = 1;
+	LONG nFrames = AVIStreamStart(pStreamIn);
 	hr = AVIERR_OK;
 	// Set the start frame
 	DWORD startFrame = streamInfoOut.dwStart;
 	DWORD nKeyFrames = 0;
 	DWORD nFramesProcessed = 0;
+	DWORD maxErrors = 10;
+	DWORD nErrors = 0;
 	while(hr == AVIERR_OK) {
-		hr = AVIStreamRead(pStreamIn, nFrames, startFrame, NULL, 0, &frameSize, NULL);
+		hr = AVIStreamRead(pStreamIn, nFrames, 1, NULL, 0, &frameSize, NULL);
 		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {
-			errMsg("Error reading stream size [Error 0x%08x %s]",
-				hr, getErrorCode(hr)); 
+			errMsg("Error reading stream size at frame %d [Error 0x%08x %s]",
+				nFrames, hr, getErrorCode(hr)); 
+			if(nErrors++ > maxErrors) {
+				hrReturnVal = hr;
+				goto CLEANUP;
+			}
 		}
 		if(hr != AVIERR_OK) {
 			break;
@@ -338,80 +397,70 @@ HRESULT copyStream(PAVISTREAM pStreamIn) {
 		frame = new char[frameSize];
 		hr = AVIStreamRead(pStreamIn, nFrames, 1, frame, frameSize, NULL, NULL);
 		if(hr != AVIERR_OK) {
-			errMsg("Error reading stream [Error 0x%08x %s]",
-				hr, getErrorCode(hr)); 
-			hrReturnVal = hr;
-			goto CLEANUP;
+			errMsg("Error reading stream at frame %d [Error 0x%08x %s]",
+				nFrames, hr, getErrorCode(hr)); 
+			if(nErrors++ > maxErrors) {
+				hrReturnVal = hr;
+				goto CLEANUP;
+			}
 		}
 		if(AVIStreamIsKeyFrame(pStreamIn, nFrames)) {
 			nKeyFrames++;
-			AVIStreamWrite(pStreamOut, nFrames, 1, frame, frameSize,
+			hr = AVIStreamWrite(pStreamOut, nFrames, 1, frame, frameSize,
 				AVIIF_KEYFRAME, NULL, NULL);
 		} else  {
-			AVIStreamWrite(pStreamOut, nFrames, 1, frame, frameSize,
+			hr = AVIStreamWrite(pStreamOut, nFrames, 1, frame, frameSize,
 				0, NULL, NULL);
 		}
+		if(hr != AVIERR_OK) {
+			errMsg("Error writing stream at frame %d [Error 0x%08x %s]",
+				nFrames, hr, getErrorCode(hr)); 
+			if(nErrors++ > maxErrors) {
+				hrReturnVal = hr;
+				goto CLEANUP;
+			}
+		}
+
 		delete [] frame;
 		frame = NULL;
 		nFrames++;
+		nFramesProcessed++;
 	}
-	printf("  dwStart=%d dwLength=%d\n", startFrame, streamInfoOut.dwLength);
-	printf("  %d frames written, %d key frames\n", nFrames, nKeyFrames);
+	printf("\n");
+	printf("  AVIStreamStart=%d AVIStreamEnd=%d\n",
+		AVIStreamStart(pStreamIn), AVIStreamEnd(pStreamIn));
+	printf("  dwStart=%d dwLength=%d\n",
+		streamInfoOut.dwStart, streamInfoOut.dwLength);
+	printf("  %d frames written, %d key frames\n", nFramesProcessed, nKeyFrames);
+	printf("  %d frame errors\n", nErrors);
 
 CLEANUP:
+#if 0
+	// DEBUG
+	printf("\nBefore AVIStreamRelease:\n");
+	if(pStreamOut) {
+		printStreamInfo(pStreamOut);
+	}
+#endif
+
 	AVIStreamRelease(pStreamOut);
+
+#if 0
+	// DEBUG
+	printf("\nAfter AVIStreamRelease:\n");
+	if(pStreamOut) {
+		printStreamInfo(pStreamOut);
+	}
+#endif
+#if 0
+	printf("\nAfter AVIStreamRelease:\n");
+	if(pStreamOut) {
+		printStreamInfo(pStreamOut);
+	}
+#endif
+
 	if(frameFormat) delete [] frameFormat;
 	if(frame) delete [] frame;
 
 	return hrReturnVal;
-}
-
-HRESULT convertVideo(PAVISTREAM pStreamIn) {
-	if(!pStreamIn) {
-		errMsg("PAVISTREAM input is null"); 
-		return AVIERR_BADPARAM; 
-	}
-
-	HRESULT hr;
-	DWORD res;
-	HIC hic;
-	BITMAPINFO bmi;
-	long biSize = sizeof(bmi);
-	ZeroMemory(&bmi, biSize);
-	hr = AVIStreamReadFormat(pStreamIn, 0, &bmi, &biSize);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot get BITMAPINFO [Error 0x%08x %s]", hr, getErrorCode(hr)); 
-		return hr; 
-	}
-
-	// Determine compression
-	BITMAPINFOHEADER header = bmi.bmiHeader;
-	printBmiHeaderInfo("    ", header);
-	DWORD biCompression = header.biCompression;
-	printf("  Compression: ");
-	printFourCcCode(biCompression, "\n");
-
-	// Open the decompressor
-	hic = ICDecompressOpen(ICTYPE_VIDEO, biCompression, &header, NULL);
-	if(hic) {
-		printf("  ICDecompressOpen successful\n");
-	} else {
-		printf("  ICDecompressOpen unsuccessful\n");
-		goto CLEANUP;
-	}
-
-	// Get the output format
-	BITMAPINFO bmiOut;
-	res = ICDecompressGetFormat(hic, &bmi, &bmiOut);
-	if(res != ICERR_OK) {
-		printf("Default output format not available\n");
-		goto CLEANUP;
-	} else {
-		printf("  Default output format:\n");
-		printBmiHeaderInfo("    ", bmiOut.bmiHeader);
-	}
-
-CLEANUP:
-	ICClose(hic);
-	return AVIERR_OK;
 }

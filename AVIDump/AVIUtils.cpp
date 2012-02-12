@@ -92,86 +92,115 @@ int errMsg(const char *fmt, ...)
 	return 0;
 }
 
-void printFileInfo(AVIFILEINFO aviInfo) {
-	printf("MaxBytesPerSec: %d\n",aviInfo.dwMaxBytesPerSec);
-	printf("Flags:\n");
-	if(aviInfo.dwFlags & AVIFILEINFO_HASINDEX)
-		printf("  HASINDEX\n");
-	if(aviInfo.dwFlags & AVIFILEINFO_MUSTUSEINDEX)
-		printf("  MUSTUSEINDEX\n");
-	if(aviInfo.dwFlags & AVIFILEINFO_ISINTERLEAVED)
-		printf("  ISINTERLEAVED\n");
-	if(aviInfo.dwFlags & AVIFILEINFO_WASCAPTUREFILE)
-		printf("  WASCAPTUREFILE\n");
-	if(aviInfo.dwFlags & AVIFILEINFO_COPYRIGHTED)
-		printf("  COPYRIGHTED\n");
-	int nStreams=aviInfo.dwStreams;
-	printf("Streams: %d\n",aviInfo.dwStreams);
-	printf("SuggestedBufferSize: %d bytes\n",
-		aviInfo.dwSuggestedBufferSize);
-	printf("Width: %d\n",aviInfo.dwWidth);
-	printf("Height: %d\n",aviInfo.dwHeight);
-	printf("Scale: %d\n",aviInfo.dwScale);
-	printf("Rate: %d\n",aviInfo.dwRate);
-	double sps=(double)aviInfo.dwRate/(double)aviInfo.dwScale;
-	printf("SamplesPerSec: %g\n",sps);
-	double length=(sps != 0.0)?(double)aviInfo.dwLength/sps:0.0;
-	printf("Length: %d (%g sec, %g min)\n",aviInfo.dwLength,
-		length,length/60.0);
-	printf("EditCount: %d\n",aviInfo.dwEditCount);
-	printf("FileType: %s\n",aviInfo.szFileType);
-	printf("\n");
+void printFileInfo(PAVIFILE pFile) {
+	if(!pFile) {
+		errMsg("PAVIFILE input is NULL\n");
+		return;
+	}
+	AVIFILEINFO fileInfo;
+	HRESULT hr=AVIFileInfo(pFile,&fileInfo,sizeof(fileInfo));
+	if(hr != 0) { 
+		errMsg("Unable to get file info [Error 0x%08x %s]",
+			hr, getErrorCode(hr)); 
+		return; 
+	}
+	printFileInfo(fileInfo);
 }
 
-void printStreamInfo(AVISTREAMINFO avis) {
-	if (avis.fccType == streamtypeVIDEO) { 
+void printFileInfo(AVIFILEINFO fileInfo) {
+	printf("MaxBytesPerSec: %d\n",fileInfo.dwMaxBytesPerSec);
+	printf("Flags:\n");
+	if(fileInfo.dwFlags & AVIFILEINFO_HASINDEX)
+		printf("  HASINDEX\n");
+	if(fileInfo.dwFlags & AVIFILEINFO_MUSTUSEINDEX)
+		printf("  MUSTUSEINDEX\n");
+	if(fileInfo.dwFlags & AVIFILEINFO_ISINTERLEAVED)
+		printf("  ISINTERLEAVED\n");
+	if(fileInfo.dwFlags & AVIFILEINFO_WASCAPTUREFILE)
+		printf("  WASCAPTUREFILE\n");
+	if(fileInfo.dwFlags & AVIFILEINFO_COPYRIGHTED)
+		printf("  COPYRIGHTED\n");
+	int nStreams=fileInfo.dwStreams;
+	printf("Streams: %d\n",fileInfo.dwStreams);
+	printf("SuggestedBufferSize: %d bytes\n",
+		fileInfo.dwSuggestedBufferSize);
+	printf("Width: %d\n",fileInfo.dwWidth);
+	printf("Height: %d\n",fileInfo.dwHeight);
+	printf("Scale: %d\n",fileInfo.dwScale);
+	printf("Rate: %d\n",fileInfo.dwRate);
+	double sps=(double)fileInfo.dwRate/(double)fileInfo.dwScale;
+	printf("SamplesPerSec: %g\n",sps);
+	double length=(sps != 0.0)?(double)fileInfo.dwLength/sps:0.0;
+	printf("Length: %d (%g sec, %g min)\n",fileInfo.dwLength,
+		length,length/60.0);
+	printf("EditCount: %d\n",fileInfo.dwEditCount);
+	printf("FileType: %s\n",fileInfo.szFileType);
+}
+
+void printStreamInfo(PAVISTREAM pStream) {
+	if(!pStream) {
+		errMsg("PAVIFILE input is NULL\n");
+		return;
+	}
+	AVISTREAMINFO streamInfo;
+	HRESULT hr=AVIStreamInfo(pStream, &streamInfo, sizeof(streamInfo)); 
+	if(hr != 0) { 
+		errMsg("Unable to get stream info [Error 0x%08x %s]",
+			hr, getErrorCode(hr)); 
+		return; 
+	}
+	printStreamInfo(streamInfo);
+}
+
+void printStreamInfo(AVISTREAMINFO pStream) {
+	if (pStream.fccType == streamtypeVIDEO) { 
 		printf("  VIDEO\n");
-	} else if (avis.fccType == streamtypeAUDIO) { 
+	} else if (pStream.fccType == streamtypeAUDIO) { 
 		printf("  AUDIO\n");
-	}  else if (avis.fccType == streamtypeMIDI) {  
+	}  else if (pStream.fccType == streamtypeMIDI) {  
 		printf("  MIDI\n");
-	}  else if (avis.fccType == streamtypeTEXT) {  
+	}  else if (pStream.fccType == streamtypeTEXT) {  
 		printf("  TEXT\n");
 	} else {
-		printf("  Unknown fccType [%d]\n",avis.fccType);
+		printf("  Unknown fccType [%d]\n",pStream.fccType);
 	}
-	printf("  Priority: %hd\n",avis.wPriority);
+	printf("  Priority: %hd\n",pStream.wPriority);
 	printf("  Flags:\n");
-	if(avis.dwFlags & AVISTREAMINFO_DISABLED)
+	if(pStream.dwFlags & AVISTREAMINFO_DISABLED)
 		printf("    DISABLED\n");
-	if(avis.dwFlags & AVISTREAMINFO_FORMATCHANGES)
+	if(pStream.dwFlags & AVISTREAMINFO_FORMATCHANGES)
 		printf("    FORMATCHANGES\n");
-	printf("  SuggestedBufferSize: %d bytes\n",avis.dwSuggestedBufferSize);
-	printf("  Quality: %d [0-10,000]\n",avis.dwQuality);
+	printf("  SuggestedBufferSize: %d bytes\n",pStream.dwSuggestedBufferSize);
+	printf("  Quality: %d [0-10,000]\n",pStream.dwQuality);
 	printf("  Left=%d Right=%d Top=%d Bottom=%d\n",
-		avis.rcFrame.left,avis.rcFrame.right,
-		avis.rcFrame.top,avis.rcFrame.bottom);
+		pStream.rcFrame.left,pStream.rcFrame.right,
+		pStream.rcFrame.top,pStream.rcFrame.bottom);
 	printf("  Width=%d Height=%d\n",
-		avis.rcFrame.right-avis.rcFrame.left,
-		avis.rcFrame.bottom-avis.rcFrame.top);
-	printf("  Start: %d\n",avis.dwStart);
-	printf("  InitialFrames: %d\n",avis.dwInitialFrames);
-	printf("  SampleSize: %d\n",avis.dwSampleSize);
-	printf("  Scale: %d\n",avis.dwScale);
-	printf("  Rate: %d\n",avis.dwRate);
-	double sps=(double)avis.dwRate/(double)avis.dwScale;
+		pStream.rcFrame.right-pStream.rcFrame.left,
+		pStream.rcFrame.bottom-pStream.rcFrame.top);
+	printf("  Start: %d\n",pStream.dwStart);
+	printf("  InitialFrames: %d\n",pStream.dwInitialFrames);
+	printf("  SampleSize: %d\n",pStream.dwSampleSize);
+	printf("  Scale: %d\n",pStream.dwScale);
+	printf("  Rate: %d\n",pStream.dwRate);
+	double sps=(double)pStream.dwRate/(double)pStream.dwScale;
 	printf("    SamplesPerSec: %g\n",sps);
-	double length=(sps != 0.0)?(double)avis.dwLength/sps:0.0;
-	printf("  Length: %d (%g sec, %g min)\n",avis.dwLength,
+	double length=(sps != 0.0)?(double)pStream.dwLength/sps:0.0;
+	printf("  Length: %d (%g sec, %g min)\n",pStream.dwLength,
 		length,length/60.0);
-	printf("  EditCount: %d\n",avis.dwEditCount);
-	printf("  FormatChangeCount: %d\n",avis.dwFormatChangeCount);
-	printf("  Name: %s\n",avis.szName);
+	printf("  EditCount: %d\n",pStream.dwEditCount);
+	printf("  FormatChangeCount: %d\n",pStream.dwFormatChangeCount);
+	printf("  Name: %s\n",pStream.szName);
 }
 
-void printBmiHeaderInfo(char *prefix, BITMAPINFOHEADER header) {
+void printBmiHeaderInfo(char *prefix, BITMAPINFOHEADER bih) {
 	printf(prefix);
-	printf("biSize: %d\n",header.biSize);
+	printf("biSize: %d\n",bih.biSize);
 	printf(prefix);
-	printf("biWidth=%d biHeight=%d\n", header.biWidth, header.biHeight);
+	printf("biWidth=%d biHeight=%d\n", bih.biWidth, bih.biHeight);
 	printf(prefix);
-	printf("biPlanes=%hd biBitCount=%hd\n", header.biPlanes, header.biBitCount);
-	DWORD biCompression = header.biCompression;
+	printf("biPlanes=%hd biBitCount=%hd\n", bih.biPlanes, bih.biBitCount);
+	DWORD biCompression = bih.biCompression;
 	if (biCompression == BI_RGB) { 
 		printf(prefix);
 		printf("biCompression=BI_RGB\n");
@@ -196,13 +225,13 @@ void printBmiHeaderInfo(char *prefix, BITMAPINFOHEADER header) {
 		printFourCcCode(biCompression, "\n");
 	}
 	printf(prefix);
-	printf("biSizeImage: %d\n",header.biSizeImage);
+	printf("biSizeImage: %d\n",bih.biSizeImage);
 	printf(prefix);
 	printf("biXPelsPerMeter=%d biYPelsPerMeter=%d\n",
-		header.biXPelsPerMeter, header.biYPelsPerMeter);
+		bih.biXPelsPerMeter, bih.biYPelsPerMeter);
 	printf(prefix);
 	printf("biClrUsed=%hd biClrImportant=%hd\n",
-		header.biClrUsed, header.biClrImportant);
+		bih.biClrUsed, bih.biClrImportant);
 }
 
 void printFourCcCode(DWORD code, char *suffix) {
@@ -252,4 +281,21 @@ void printAvailableDecompressors(LPBITMAPINFO pBmi) {
 			ICClose(hic); 
 		} 
 	} 
+}
+
+void printAudioInfo(PAVIFILE pFile) {
+	PAVISTREAM *pStreams = new PAVISTREAM[1];
+
+	// Find the first audio stream
+	HRESULT hr=AVIFileGetStream(pFile, &pStreams[0], streamtypeAUDIO, 0) ;
+	if(hr != AVIERR_OK || pStreams[0] == NULL) {
+		errMsg("printAudioInfo: Cannot open an audio stream"); 
+		return; 
+	}
+
+	printStreamInfo(pStreams[0]);
+
+	// Cleanup
+	delete [] pStreams;
+	pStreams = NULL;
 }

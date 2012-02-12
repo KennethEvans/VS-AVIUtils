@@ -14,7 +14,22 @@ void printFileInfo(AVIFILEINFO aviInfo);
 void printStreamInfo(PAVISTREAM pStream);
 void printStreamInfo(AVISTREAMINFO avis);
 void printBmiHeaderInfo(char *prefix, BITMAPINFOHEADER header);
+void printCompressOptions(AVICOMPRESSOPTIONS opts);
 void printAvailableDecompressors(LPBITMAPINFO pBmi);
 void printAudioInfo(PAVIFILE pFile);
+HRESULT getBufferSizes(PAVISTREAM pStream, LONG *sizeMin, LONG *sizeMax,
+					   LONG *nErrors);
+HRESULT getNStreams(PAVIFILE pFile, DWORD *nStreams);
+
+// Function prototypes from Copy
+HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1);
+HRESULT copyStream1(PAVIFILE pFile2, PAVISTREAM pStream1);
+HRESULT copyStream2(PAVIFILE pFile2, PAVISTREAM pStream1);
+
+// Function prototypes from ConvertVideo
+HRESULT convertVideo(PAVIFILE pFile2, PAVISTREAM pStream1);
+HRESULT convertVideo1(PAVIFILE pFile2, PAVISTREAM pStream1);
+HRESULT convertVideo2(PAVIFILE pFile2, PAVISTREAM pStream1);
+
 
 #endif

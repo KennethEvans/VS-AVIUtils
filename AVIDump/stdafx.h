@@ -17,5 +17,6 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <limits.h>
 
 #include <AVIUtils.h>

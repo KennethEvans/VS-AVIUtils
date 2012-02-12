@@ -4,6 +4,7 @@
 #include "stdafx.h"
 
 // Function prototypes from AVITest
-void JunkTest();
+void junkTest();
+void testCompression();
 
 #endif

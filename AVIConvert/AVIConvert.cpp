@@ -11,8 +11,6 @@
 // Function prototypes
 int parseCommand(int argc, char **argv);
 void usage(void);
-HRESULT copyStream(PAVISTREAM pStreamIn);
-HRESULT convertVideo(PAVISTREAM pStreamIn);
 
 // Global variables
 char aviFileName1[PATH_MAX];
@@ -60,7 +58,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Open source file
 	hr=AVIFileOpen(&pFile1,aviFileName1,OF_SHARE_DENY_WRITE,0L); 
 	if(hr != 0) { 
-		errMsg("Unable to open %s [Error 0x%08x %s]",
+		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
@@ -68,7 +66,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Get source info
 	hr=AVIFileInfo(pFile1,&fileInfo,sizeof(fileInfo));
 	if(hr != 0) { 
-		errMsg("Unable to get info from %s [Error 0x%08x %s]",
+		errMsg("Unable to get info from %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
@@ -79,12 +77,12 @@ int _tmain(int argc, _TCHAR* argv[])
 	// Open destination file
 	hr=AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
 	if(hr != 0) { 
-		errMsg("Unable to open %s [Error 0x%08x %s]",
+		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
 			aviFileName2, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
 
-	// Open the streams
+	// Allocate the streams
 	if(nStreams <= 0) {
 		errMsg("No streams in %s",aviFileName1); 
 		goto ABORT;
@@ -103,21 +101,24 @@ int _tmain(int argc, _TCHAR* argv[])
 		pStreams[i] = NULL; 
 		hr=AVIFileGetStream(pFile1,&pStreams[i],0L,i) ;
 		if(hr != AVIERR_OK || pStreams[i] == NULL) {
-			errMsg("Cannot open stream %d",i); 
+			errMsg("Cannot open stream %d [Error 0x%08x %s]",
+				i, hr, getErrorCode(hr)); 
 			continue; 
 		}
+
 		// Get stream info
 		hr=AVIStreamInfo(pStreams[i],&streamInfo,sizeof(streamInfo)); 
 		if(hr != 0) { 
-			errMsg("Unable to get stream info for stream %d",i); 
+			errMsg("Unable to get stream info for stream %d [Error 0x%08x %s]",
+				i, hr, getErrorCode(hr)); 
 			goto ABORT; 
 		}
 		printStreamInfo(streamInfo);
 
 		if (streamInfo.fccType == streamtypeVIDEO) { 
 			printf("\n  Processing VIDEO\n");
-			//hr = convertVideo(pStreams[i]);
-			hr = copyStream(pStreams[i]);
+			//hr = convertVideo(pFile2, pStreams[i]);
+			hr = copyStream(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Convert failed [Error 0x%08x %s]",
 					hr, getErrorCode(hr)); 
@@ -126,7 +127,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			continue;
 		} else if (streamInfo.fccType == streamtypeAUDIO) { 
 			printf("\n  Processing AUDIO\n");
-			hr = copyStream(pStreams[i]);
+			hr = copyStream1(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
@@ -134,7 +135,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			continue;
 		}  else if (streamInfo.fccType == streamtypeMIDI) {  
 			printf("\n  Processing MIDI\n");
-			hr = copyStream(pStreams[i]);
+			hr = copyStream(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
@@ -142,7 +143,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			continue;
 		}  else if (streamInfo.fccType == streamtypeTEXT) {  
 			printf("\n  Processing TEXT\n");
-			hr = copyStream(pStreams[i]);
+			hr = copyStream(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
@@ -150,7 +151,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			continue;
 		} else {
 			printf("\n  Processing unknown fccType [%d]\n",streamInfo.fccType);
-			hr = copyStream(pStreams[i]);
+			hr = copyStream(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
@@ -252,282 +253,4 @@ void usage(void) {
 		"    destfilename Name of converted file\n"
 		"    -h help      This message\n"
 		);
-}
-
-HRESULT copyStream(PAVISTREAM pStreamIn) {
-	if(!pStreamIn) {
-		errMsg("PAVISTREAM input is null"); 
-		return AVIERR_BADPARAM; 
-	}
-
-	HRESULT hrReturnVal = AVIERR_OK;
-	HRESULT hr;
-	PAVISTREAM pStreamOut;
-
-	// Get the format
-	char *frameFormat = NULL;
-	LONG frameFormatSize = 0;
-	hr = AVIStreamReadFormat(pStreamIn, 0, NULL, &frameFormatSize);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot read format size [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
-	}
-	frameFormat = new char[frameFormatSize];
-	hr = AVIStreamReadFormat(pStreamIn, 0,
-		frameFormat, &frameFormatSize);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot read format [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
-	}
-
-	// Get the stream info from the input stream
-	AVISTREAMINFO streamInfoOut;
-	ZeroMemory(&streamInfoOut, sizeof(streamInfoOut));
-	hr=AVIStreamInfo(pStreamIn,&streamInfoOut,sizeof(streamInfoOut)); 
-	if(hr != 0) { 
-		errMsg("Cannot read stream info [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
-	}
-
-	// Create the stream
-	hr = AVIFileCreateStream(pFile2, &pStreamOut, &streamInfoOut);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot create stream [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
-	}
-
-	// Set the format
-	hr = AVIStreamSetFormat(pStreamOut, 0, frameFormat, frameFormatSize);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot set format [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
-	}
-
-#if DEBUG
-	printf("frameFormatSize=%d\n", frameFormatSize);
-	printf("BITMAPINFOHEADER=%d PCMWAVEFORMAT=%d WAVEFORMAT=%d WAVEFORMATEX=%d\n",
-		sizeof(BITMAPINFOHEADER), sizeof(PCMWAVEFORMAT),
-		sizeof(WAVEFORMAT), sizeof(WAVEFORMATEX));
-#endif
-
-	// Loop over the frames
-	char *frame = NULL;
-	LONG frameSize = 0;
-	LONG nFrames = AVIStreamStart(pStreamIn);
-	// Set the start frame
-	DWORD startFrame = streamInfoOut.dwStart;
-	DWORD nKeyFrames = 0;
-	DWORD nFramesProcessed = 0;
-	DWORD maxErrors = 10;
-	DWORD nErrors = 0;
-	LONG minFrameSize = 0x7fffffff;  // TODO do this better
-	LONG maxFrameSize = 0;
-	LONG frameOut = AVIStreamStart(pStreamIn);
-	for(int i = AVIStreamStart(pStreamIn); i < AVIStreamEnd(pStreamIn); i++) {
-		// Find the frameSize
-		hr = AVIStreamRead(pStreamIn, i, 1, NULL, 0, &frameSize, NULL);
-		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {
-			if(++nErrors >= maxErrors) {
-				goto ERRORS;
-			}
-			errMsg("Error reading stream size at frame %d [Error 0x%08x %s]",
-				i, hr, getErrorCode(hr)); 
-		}
-		if(frameSize > maxFrameSize) maxFrameSize = frameSize;
-		if(frameSize < minFrameSize) minFrameSize = frameSize;
-		// Allocate space
-		frame = new char[frameSize];
-		// Get the frame
-		hr = AVIStreamRead(pStreamIn, i, 1, frame, frameSize, NULL, NULL);
-		if(hr != AVIERR_OK) {
-			if(++nErrors >= maxErrors) {
-				goto ERRORS;
-			}
-			errMsg("Error reading stream at frame %d [Error 0x%08x %s]",
-				i, hr, getErrorCode(hr)); 
-		}
-
-		// Write the frame
-		if(AVIStreamIsKeyFrame(pStreamIn, i)) {
-			nKeyFrames++;
-			hr = AVIStreamWrite(pStreamOut, frameOut, 1, frame, frameSize,
-				AVIIF_KEYFRAME, NULL, NULL);
-		} else  {
-			hr = AVIStreamWrite(pStreamOut, frameOut, 1, frame, frameSize,
-				0, NULL, NULL);
-		}
-		if(hr != AVIERR_OK) {
-			if(++nErrors >= maxErrors) {
-				goto ERRORS;
-			}
-			errMsg("Error writing stream at frame %d [Error 0x%08x %s]",
-				i, hr, getErrorCode(hr)); 
-		} else {
-			frameOut++;
-		}
-
-		delete [] frame;
-		frame = NULL;
-		nFrames++;
-		nFramesProcessed++;
-	}
-	goto CLEANUP;
-
-ERRORS:
-	printf("More than %d errors, aborting\n", maxErrors);
-	hrReturnVal = hr;
-
-CLEANUP:
-	printf("\n");
-	printf("  AVIStreamStart=%d AVIStreamEnd=%d\n",
-		AVIStreamStart(pStreamIn), AVIStreamEnd(pStreamIn));
-	printf("  dwStart=%d dwLength=%d\n",
-		streamInfoOut.dwStart, streamInfoOut.dwLength);
-	printf("  minFrameSize=%d maxFrameSize=%d dwSuggestedBufferSize=%d\n",
-		minFrameSize, maxFrameSize, streamInfoOut.dwSuggestedBufferSize);
-	printf("  %d frames written, %d key frames\n", nFramesProcessed, nKeyFrames);
-	printf("  %d frame errors\n", nErrors);
-
-#if 0
-	// DEBUG
-	printf("\nBefore AVIStreamRelease:\n");
-	if(pStreamOut) {
-		printStreamInfo(pStreamOut);
-	}
-#endif
-
-	AVIStreamRelease(pStreamOut);
-
-#if 0
-	// DEBUG
-	printf("\nAfter AVIStreamRelease:\n");
-	if(pStreamOut) {
-		printStreamInfo(pStreamOut);
-	}
-#endif
-#if 0
-	printf("\nAfter AVIStreamRelease:\n");
-	if(pStreamOut) {
-		printStreamInfo(pStreamOut);
-	}
-#endif
-
-	if(frameFormat) delete [] frameFormat;
-	if(frame) delete [] frame;
-
-	return hrReturnVal;
-}
-
-HRESULT convertVideo(PAVISTREAM pStreamIn) {
-	if(!pStreamIn) {
-		errMsg("PAVISTREAM input is null"); 
-		return AVIERR_BADPARAM; 
-	}
-
-	HRESULT hrReturnVal = AVIERR_OK;
-	HRESULT hr;
-	DWORD res;
-	HIC hic;
-	BITMAPINFO bmi;
-	long biSize = sizeof(bmi);
-	ZeroMemory(&bmi, biSize);
-	hr = AVIStreamReadFormat(pStreamIn, 0, &bmi, &biSize);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot get BITMAPINFO [Error 0x%08x %s]", hr, getErrorCode(hr)); 
-		return hr; 
-	}
-
-	// Get the stream info from the input stream
-	AVISTREAMINFO streamInfoOut;
-	ZeroMemory(&streamInfoOut, sizeof(streamInfoOut));
-	hr=AVIStreamInfo(pStreamIn,&streamInfoOut,sizeof(streamInfoOut)); 
-	if(hr != 0) { 
-		errMsg("Cannot read stream info [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		return hr; 
-	}
-
-
-	// Determine compression
-	BITMAPINFOHEADER header = bmi.bmiHeader;
-	printBmiHeaderInfo("    ", header);
-	DWORD biCompression = header.biCompression;
-	printf("  Compression: ");
-	printFourCcCode(biCompression, "\n");
-
-	// Open the decompressor
-	hic = ICDecompressOpen(ICTYPE_VIDEO, biCompression, &header, NULL);
-	if(hic) {
-		printf("  ICDecompressOpen successful\n");
-	} else {
-		printf("  ICDecompressOpen unsuccessful\n");
-		goto CLEANUP;
-	}
-
-	// Get the output format
-	BITMAPINFO bmiOut;
-	res = ICDecompressGetFormat(hic, &bmi, &bmiOut);
-	if(res != ICERR_OK) {
-		printf("Default output format not available\n");
-		goto CLEANUP;
-	} else {
-		printf("  Default output format:\n");
-		printBmiHeaderInfo("    ", bmiOut.bmiHeader);
-	}
-
-	// Loop over the frames
-	char *frame = NULL;
-	LONG frameSize = 0;
-	LONG nFrames = AVIStreamStart(pStreamIn);
-	// Set the start frame
-	DWORD startFrame = streamInfoOut.dwStart;
-	DWORD nKeyFrames = 0;
-	DWORD nFramesProcessed = 0;
-	DWORD maxErrors = 10;
-	DWORD nErrors = 0;
-	LONG minFrameSize = 0x7fffffff;  // TODO do this better
-	LONG maxFrameSize = 0;
-	LONG frameOut = AVIStreamStart(pStreamIn);
-	for(int i = AVIStreamStart(pStreamIn); i < AVIStreamEnd(pStreamIn); i++) {
-		// Find the frameSize
-		hr = AVIStreamRead(pStreamIn, i, 1, NULL, 0, &frameSize, NULL);
-		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {
-			if(++nErrors >= maxErrors) {
-				goto ERRORS;
-			}
-			errMsg("Error reading stream size at frame %d [Error 0x%08x %s]",
-				i, hr, getErrorCode(hr)); 
-		}
-		if(frameSize > maxFrameSize) maxFrameSize = frameSize;
-		if(frameSize < minFrameSize) minFrameSize = frameSize;
-		// Allocate space
-		frame = new char[frameSize];
-		// Get the frame
-		hr = AVIStreamRead(pStreamIn, i, 1, frame, frameSize, NULL, NULL);
-		if(hr != AVIERR_OK) {
-			if(++nErrors >= maxErrors) {
-				goto ERRORS;
-			}
-			errMsg("Error reading stream at frame %d [Error 0x%08x %s]",
-				i, hr, getErrorCode(hr)); 
-		}
-	}
-
-ERRORS:
-	printf("More than %d errors, aborting\n", maxErrors);
-	hrReturnVal = hr;
-
-CLEANUP:
-	ICClose(hic);
-	return AVIERR_OK;
 }

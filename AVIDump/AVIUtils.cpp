@@ -234,6 +234,64 @@ void printBmiHeaderInfo(char *prefix, BITMAPINFOHEADER bih) {
 		bih.biClrUsed, bih.biClrImportant);
 }
 
+void printCompressOptions(AVICOMPRESSOPTIONS opts) {
+	if (opts.fccType == streamtypeVIDEO) { 
+		printf("  VIDEO\n");
+	} else if (opts.fccType == streamtypeAUDIO) { 
+		printf("  AUDIO\n");
+	}  else if (opts.fccType == streamtypeMIDI) {  
+		printf("  MIDI\n");
+	}  else if (opts.fccType == streamtypeTEXT) {  
+		printf("  TEXT\n");
+	} else {
+		printf("  Unknown fccType [%d]\n",opts.fccType);
+	}
+	DWORD fccHandler = opts.fccHandler;
+	if (fccHandler == BI_RGB) { 
+		printf("  fccHandler=BI_RGB\n");
+	} else 	if (fccHandler == BI_RLE8) { 
+		printf("  fccHandler=BI_RLE8\n");
+	} else 	if (fccHandler == BI_RLE4) { 
+		printf("  fccHandler=BI_RLE4\n");
+	} else 	if (fccHandler == BI_BITFIELDS) { 
+		printf("  fccHandler=BI_BITFIELDS\n");
+	} else 	if (fccHandler == BI_JPEG) { 
+		printf("  fccHandler=BI_JPEG\n");
+	} else 	if (fccHandler == BI_PNG) { 
+		printf("  fccHandler=BI_PNG\n");
+	} else {
+		printf("  fccHandler=");
+		printFourCcCode(fccHandler, "\n");
+	}
+	printf("  fccType: ");
+	printFourCcCode(opts.fccType, "\n");
+	printf("  dwKeyFrameEvery: %d\n",opts.dwKeyFrameEvery);
+	printf("  dwQuality: %d\n",opts.dwQuality);
+	printf("  dwBytesPerSecond: %d\n",opts.dwBytesPerSecond);
+	DWORD dwFlags = opts.dwFlags;
+	printf("  dwFlags: \n");
+	if(dwFlags & AVICOMPRESSF_DATARATE) printf("  AVICOMPRESSF_DATARATE ");
+	if(dwFlags & AVICOMPRESSF_INTERLEAVE) printf("  AVICOMPRESSF_INTERLEAVE ");
+	if(dwFlags & AVICOMPRESSF_KEYFRAMES) printf("  AVICOMPRESSF_KEYFRAMES ");
+	if(dwFlags & AVICOMPRESSF_VALID) printf("  AVICOMPRESSF_VALID ");
+	if(opts.lpFormat == NULL) {
+		printf("  lpFormat: NULL\n");
+	} else {
+		printf("  lpFormat: Non-NULL\n");
+	}
+	printf("  cbFormat: %d\n",opts.cbFormat);
+	if(opts.lpParms == NULL) {
+		printf("  lpParms: NULL\n");
+	} else {
+		printf("  lpParms: Non-NULL\n");
+	}
+	printf("  cbParms: %d\n",opts.cbParms);
+	printf("  dwInterleaveEvery: %d\n",opts.dwInterleaveEvery);
+
+	printf("  dwBytesPerSecond: %d\n",opts.dwBytesPerSecond);
+	printf("  dwBytesPerSecond: %d\n",opts.dwBytesPerSecond);
+}
+
 void printFourCcCode(DWORD code, char *suffix) {
 	printf("%c%c%c%c",
 		(char)(code), (char)(code>>8),
@@ -298,4 +356,40 @@ void printAudioInfo(PAVIFILE pFile) {
 	// Cleanup
 	delete [] pStreams;
 	pStreams = NULL;
+}
+
+HRESULT getBufferSizes(PAVISTREAM pStream, LONG *sizeMin, LONG *sizeMax, LONG *nErrors) {
+	HRESULT hr;
+	HRESULT hrReturnVal = AVIERR_OK;
+
+	*sizeMin = LONG_MAX;
+	*sizeMax = 0;
+	LONG size;
+	*nErrors = 0;
+	for(int i = AVIStreamStart(pStream); i < AVIStreamEnd(pStream); i++) {
+		hr = AVIStreamSampleSize(pStream, i, &size);
+		if(hr != AVIERR_OK) {
+			*nErrors++;
+			hrReturnVal = AVIERR_ERROR;
+			continue;
+		}
+		if(size < *sizeMin) *sizeMin = size;
+		if(size > *sizeMax) *sizeMax = size;
+	}
+	return hrReturnVal;
+}
+
+HRESULT getNStreams(PAVIFILE pFile, DWORD *nStreams) {
+	if(pFile == NULL) {
+		return AVIERR_BADPARAM;
+	}
+
+	// Get file info
+	AVIFILEINFO fileInfo; 
+	HRESULT hr=AVIFileInfo(pFile, &fileInfo, sizeof(fileInfo));
+	if(hr != 0) {
+		return hr;
+	}
+	*nStreams=fileInfo.dwStreams;
+	return AVIERR_OK;
 }

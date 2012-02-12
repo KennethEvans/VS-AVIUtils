@@ -13,4 +13,4 @@
 #include <tchar.h>
 
 #include "AVITest.h"
-
+#include <AVIUtils.h>

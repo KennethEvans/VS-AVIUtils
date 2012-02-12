@@ -6,7 +6,7 @@ CRect and CSize were replaced by SIZE and RECT
 
 #define OUT_FILE_NAME _T("junktest.avi")
 
-void JunkTest() {
+void junkTest() {
 	HRESULT hr;
 	PAVIFILE pFile;
 	PAVISTREAM pVideoStream;

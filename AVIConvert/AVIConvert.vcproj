@@ -188,6 +188,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\ConvertVideo.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Copy.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\stdafx.cpp"
 				>
 				<FileConfiguration

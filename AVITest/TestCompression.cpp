@@ -4,8 +4,10 @@
 
 //#define FILE_NAME_IN "junktest.avi"
 //#define FILE_NAME_OUT "junktest.test.avi"
-#define FILE_NAME_IN "Reel 13.avi"
-#define FILE_NAME_OUT "Reel 13.test.avi"
+//#define FILE_NAME_IN "Reel 13.avi"
+//#define FILE_NAME_OUT "Reel 13.test.avi"
+#define FILE_NAME_IN "Rapids Boating.avi"
+#define FILE_NAME_OUT "Rapids Boating.test.avi"
 
 void testCompression() {
 	HRESULT hr;

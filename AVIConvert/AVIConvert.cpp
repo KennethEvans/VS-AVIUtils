@@ -118,7 +118,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		if (streamInfo.fccType == streamtypeVIDEO) { 
 			printf("\n  Processing VIDEO\n");
 			//hr = convertVideo(pFile2, pStreams[i]);
-			hr = copyStream(pFile2, pStreams[i]);
+			hr = copyStream1(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Convert failed [Error 0x%08x %s]",
 					hr, getErrorCode(hr)); 
@@ -127,7 +127,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			continue;
 		} else if (streamInfo.fccType == streamtypeAUDIO) { 
 			printf("\n  Processing AUDIO\n");
-			hr = copyStream1(pFile2, pStreams[i]);
+			hr = copyStream(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
@@ -164,7 +164,7 @@ int _tmain(int argc, _TCHAR* argv[])
 
 END:
 	// Normal exit
-#if 1
+#if 0
 	printf("\nBefore AVIFileRelease:\n");
 	printFileInfo(pFile2);
 	printf("\n");

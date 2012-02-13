@@ -2,38 +2,31 @@
 
 #include "stdafx.h"
 
-HRESULT convertVideo(PAVIFILE pFile2, PAVISTREAM pStream1) {
-	if(!pFile2) {
-		errMsg("PAVIFILE input is null"); 
+HRESULT decompressVideo(PAVISTREAM pStream1, PAVISTREAM pStream2) {
+	if(!pStream1) {
+		errMsg("decompressVideo: stream 1 is null"); 
 		return AVIERR_BADPARAM; 
 	}
-	if(!pStream1) {
-		errMsg("PAVISTREAM input is null"); 
+	if(!pStream2) {
+		errMsg("decompressVideo: stream 2 is null"); 
 		return AVIERR_BADPARAM; 
 	}
 
 	HRESULT hrReturnVal = AVIERR_OK;
 	HRESULT hr;
-	PAVISTREAM pStream2;
+	DWORD res;
+	HIC hic = NULL;
+	BITMAPINFO bmi1, bmi2;
+	BITMAPINFOHEADER bmih1, bmih2;
+	char *pBuf1 = NULL;
+	char *pBuf2 = NULL;
 
-	// Get the format
-	char *format1 = NULL;
-	LONG formatSize1 = 0;
-	hr = AVIStreamReadFormat(pStream1, 0, NULL, &formatSize1);
+	long biSize = sizeof(bmi1);
+	ZeroMemory(&bmi1, biSize);
+	hr = AVIStreamReadFormat(pStream1, 0, &bmi1, &biSize);
 	if(hr != AVIERR_OK) {
-		errMsg("Cannot read format size [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
-	}
-	format1 = new char[formatSize1];
-	hr = AVIStreamReadFormat(pStream1, 0,
-		format1, &formatSize1);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot read format [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
+		errMsg("Cannot get BITMAPINFO [Error 0x%08x %s]", hr, getErrorCode(hr)); 
+		return hr; 
 	}
 
 	// Get the stream info from the input stream
@@ -41,39 +34,39 @@ HRESULT convertVideo(PAVIFILE pFile2, PAVISTREAM pStream1) {
 	ZeroMemory(&streamInfo1, sizeof(streamInfo1));
 	hr=AVIStreamInfo(pStream1,&streamInfo1,sizeof(streamInfo1)); 
 	if(hr != 0) { 
-		errMsg("Cannot read stream info [Error 0x%08x %s]",
+		errMsg("Cannot read stream info 1 [Error 0x%08x %s]",
 			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
+		return hr; 
+	}
+
+	// Determine compression
+	bmih1 = bmi1.bmiHeader;
+	printBmiHeaderInfo("    ", bmih1);
+	DWORD biCompression = bmih1.biCompression;
+	printf("  Compression: ");
+	printFourCcCode(biCompression, "\n");
+
+	// Open the decompressor
+	hic = ICDecompressOpen(ICTYPE_VIDEO, biCompression, &bmih1, NULL);
+	if(hic) {
+		printf("  ICDecompressOpen successful\n");
+	} else {
+		printf("  ICDecompressOpen unsuccessful\n");
 		goto CLEANUP;
 	}
 
-	// Create the output stream
-	hr = AVIFileCreateStream(pFile2, &pStream2, &streamInfo1);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot create stream [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
+	// Get the output format
+	res = ICDecompressGetFormat(hic, &bmi1, &bmi2);
+	if(res != ICERR_OK) {
+		printf("Default output format not available\n");
 		goto CLEANUP;
 	}
-
-	// Set the format
-	hr = AVIStreamSetFormat(pStream2, 0, format1, formatSize1);
-	if(hr != AVIERR_OK) {
-		errMsg("Cannot set format [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		hrReturnVal = hr;
-		goto CLEANUP;
-	}
-
-#if DEBUG
-	printf("formatSize1=%d\n", formatSize1);
-	printf("BITMAPINFOHEADER=%d PCMWAVEFORMAT=%d WAVEFORMAT=%d WAVEFORMATEX=%d\n",
-		sizeof(BITMAPINFOHEADER), sizeof(PCMWAVEFORMAT),
-		sizeof(WAVEFORMAT), sizeof(WAVEFORMATEX));
-#endif
+	bmih2 = bmi2.bmiHeader;
+	printf("  Default output format:\n");
+	printBmiHeaderInfo("    ", bmih2);
 
 #if 1
-	// Get the buffer sizes
+	// Get the buffer sizes for the input
 	LONG sizeMin;
 	LONG sizeMax;
 	LONG nSizeErrors;
@@ -84,36 +77,46 @@ HRESULT convertVideo(PAVIFILE pFile2, PAVISTREAM pStream1) {
 #endif
 
 	// Loop over the frames
-	char *pBuf1 = NULL;
+	printf("  Processing %d frames starting at frame %d...\n",
+		streamInfo1.dwLength, AVIStreamStart(pStream1));
+	// The input buffer will be allocated with a determined size for each frame
 	LONG bufSize1 = 0;
+	// The output buffer is the size of the image
+	LONG bufSize2 = bmih2.biSizeImage;
+	pBuf2 = new char[bufSize2];
 	LONG nFrames = AVIStreamStart(pStream1);
 	// Set the start pBuf1
-	DWORD startFrame = streamInfo1.dwStart;
 	DWORD nKeyFrames = 0;
 	DWORD nFramesProcessed = 0;
 	DWORD maxErrors = 10;
 	DWORD nErrors = 0;
 	LONG frameOut = AVIStreamStart(pStream1);
 	for(int i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
-		// Find the size for bufSize1
+		// Find bufSize1
 		hr = AVIStreamRead(pStream1, i, 1, NULL, 0, &bufSize1, NULL);
 		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {
-			//if(++nErrors >= maxErrors) {
-			//	goto ERRORS;
-			//}
-			//errMsg("Error reading stream size at frame %d [Error 0x%08x %s]",
-			//	i, hr, getErrorCode(hr)); 
+			if(++nErrors >= maxErrors) {
+				goto ERRORS;
+			}
+			errMsg("Error reading stream size at frame %d [Error 0x%08x %s]",
+				i, hr, getErrorCode(hr)); 
 		}
 		// Allocate space
 		pBuf1 = new char[bufSize1];
-		// Get the buffer
+#if 0
+		if(bufSize1 != streamInfo1.dwSuggestedBufferSize) {
+			printf("Non-sandard frame size %d at frame %d\n", bufSize1, i);
+		}
+#endif
+
+		// Get the frame
 		hr = AVIStreamRead(pStream1, i, 1, pBuf1, bufSize1, NULL, NULL);
 		if(hr != AVIERR_OK) {
-			//if(++nErrors >= maxErrors) {
-			//	goto ERRORS;
-			//}
-			//errMsg("Error reading stream at frame %d [Error 0x%08x %s]",
-			//	i, hr, getErrorCode(hr)); 
+			if(++nErrors >= maxErrors) {
+				goto ERRORS;
+			}
+			errMsg("Error reading stream at frame %d [Error 0x%08x %s]",
+				i, hr, getErrorCode(hr)); 
 		}
 
 		// Write to the output stream
@@ -140,7 +143,6 @@ HRESULT convertVideo(PAVIFILE pFile2, PAVISTREAM pStream1) {
 		nFrames++;
 		nFramesProcessed++;
 	}
-	goto CLEANUP;
 
 ERRORS:
 	printf("More than %d errors, aborting\n", maxErrors);
@@ -156,32 +158,12 @@ CLEANUP:
 		nFramesProcessed, frameOut - AVIStreamStart(pStream1), nKeyFrames);
 	printf("  %d frame errors\n", nErrors);
 
-#if 0
-	// DEBUG
-	printf("\nBefore AVIStreamRelease:\n");
-	if(pStream2) {
-		printStreamInfo(pStream2);
-	}
-#endif
-
-	AVIStreamRelease(pStream2);
-
-#if 0
-	// DEBUG
-	printf("\nAfter AVIStreamRelease:\n");
-	if(pStream2) {
-		printStreamInfo(pStream2);
-	}
-#endif
-#if 0
-	printf("\nAfter AVIStreamRelease:\n");
-	if(pStream2) {
-		printStreamInfo(pStream2);
-	}
-#endif
-
-	if(format1) delete [] format1;
+	if(hic) ICClose(hic);
+	hic = NULL;
 	if(pBuf1) delete [] pBuf1;
+	pBuf1 = NULL;
+	if(pBuf2) delete [] pBuf2;
+	pBuf2 = NULL;
 
-	return hrReturnVal;
+	return AVIERR_OK;
 }

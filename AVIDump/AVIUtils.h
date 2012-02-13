@@ -24,12 +24,8 @@ HRESULT getNStreams(PAVIFILE pFile, DWORD *nStreams);
 // Function prototypes from Copy
 HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1);
 HRESULT copyStream1(PAVIFILE pFile2, PAVISTREAM pStream1);
-HRESULT copyStream2(PAVIFILE pFile2, PAVISTREAM pStream1);
 
 // Function prototypes from ConvertVideo
-HRESULT convertVideo(PAVIFILE pFile2, PAVISTREAM pStream1);
-HRESULT convertVideo1(PAVIFILE pFile2, PAVISTREAM pStream1);
-HRESULT convertVideo2(PAVIFILE pFile2, PAVISTREAM pStream1);
-
+HRESULT decompressVideo(PAVISTREAM pStream1, PAVISTREAM pStream2);
 
 #endif

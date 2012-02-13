@@ -121,6 +121,9 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		}  else if (streamInfo.fccType == streamtypeTEXT) {  
 			continue;
 		} else {
+			printf("\n    Got unknown fccType [");
+			printFourCcCode(streamInfo.fccType, "]\n");
+			printf("]\n");
 			continue;
 		}
 		printf("\n");

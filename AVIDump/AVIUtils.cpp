@@ -1,10 +1,5 @@
 #include "stdafx.h"
 
-#define APP_OK 0
-#define APP_ERROR 1
-
-#define PATH_MAX _MAX_PATH
-
 // Global variables
 char errorString[1024];  // Danger fixed size
 

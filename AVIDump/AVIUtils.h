@@ -27,5 +27,7 @@ HRESULT copyStream1(PAVIFILE pFile2, PAVISTREAM pStream1);
 
 // Function prototypes from ConvertVideo
 HRESULT decompressVideo(PAVISTREAM pStream1, PAVISTREAM pStream2);
+HRESULT decompressVideo(PAVIFILE pFile2, PAVISTREAM pStream1,
+						PAVISTREAM pStream2);
 
 #endif

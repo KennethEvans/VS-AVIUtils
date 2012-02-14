@@ -7,6 +7,12 @@
 
 #include "stdafx.h"
 
+#if 1
+#  define _CRTDBG_MAP_ALLOC
+#  include <stdlib.h>
+#  include <crtdbg.h>
+#endif
+
 HRESULT getBufferSizes(PAVISTREAM pStream, LONG *sizeMin, LONG *sizeMax, LONG *nErrors);
 
 
@@ -91,6 +97,13 @@ HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1) {
 		streamInfo1.dwSuggestedBufferSize, sizeMin, sizeMax, nSizeErrors);
 #endif
 
+#if 1
+	OutputDebugString("\ncopyStream: before loop:\n");
+	_CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_DEBUG );
+	_CrtMemState s1;
+	_CrtMemCheckpoint( &s1 );
+	_CrtMemDumpStatistics( &s1 );
+#endif
 	// Loop over the frames
 	char *pBuf1 = NULL;
 	LONG bufSize1 = 0;
@@ -134,6 +147,16 @@ HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1) {
 				0, NULL, NULL);
 		}
 		if(hr != AVIERR_OK) {
+#if 1
+			// Dump memory on first error
+			if(nErrors < 1) {
+				OutputDebugString("\ncopyStream: error:\n");
+				_CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_DEBUG );
+				_CrtMemState s2;
+				_CrtMemCheckpoint( &s2 );
+				_CrtMemDumpStatistics( &s2 );
+			}
+#endif
 			if(++nErrors >= maxErrors) {
 				goto ERRORS;
 			}
@@ -163,6 +186,20 @@ CLEANUP:
 	printf("  %d frames processed, %d frames written, %d key frames\n",
 		nFramesProcessed, frameOut - AVIStreamStart(pStream1), nKeyFrames);
 	printf("  %d frame errors\n", nErrors);
+
+#if 1
+	OutputDebugString("\ncopyStream: after loop:\n");
+	_CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_DEBUG );
+	_CrtMemState s3;
+	_CrtMemCheckpoint( &s3 );
+	_CrtMemDumpStatistics( &s3 );
+
+	OutputDebugString("\ncopyStream: difference before/after loop:\n");
+	_CrtMemState s4;
+	_CrtMemDifference( &s4, &s1, &s3);
+	_CrtMemDumpStatistics( &s4 );
+#endif
+
 
 #if 0
 	// DEBUG

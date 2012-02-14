@@ -21,15 +21,14 @@ int aviFileSpecified2=0;
 int _tmain(int argc, _TCHAR* argv[])
 {
 	HRESULT hr; 
-	BOOL libOpened = FALSE;
-	PAVIFILE pFile1 = NULL; 
+	BOOL libOpened=FALSE;
+	PAVIFILE pFile1=NULL; 
+	PAVIFILE pFile2=NULL;
+	PAVISTREAM *pStreams=NULL;
 	AVIFILEINFO fileInfo;
 	AVISTREAMINFO streamInfo; 
-	PAVISTREAM *pStreams = NULL;
-	LPAVICOMPRESSOPTIONS *pOpts = NULL;
 	int i;
-	int nStreams = 0;
-	int aborted = 0;
+	int nStreams=0;
 
 	// Title
 	printf("\nAVIConvert\n");
@@ -51,10 +50,10 @@ int _tmain(int argc, _TCHAR* argv[])
 
 	// Initialize library
 	AVIFileInit();
-	libOpened = TRUE;
+	libOpened=TRUE;
 
 	// Open source file
-	hr=AVIFileOpen(&pFile1, aviFileName1, OF_SHARE_DENY_WRITE, 0L); 
+	hr=AVIFileOpen(&pFile1,aviFileName1,OF_SHARE_DENY_WRITE,0L); 
 	if(hr != AVIERR_OK) { 
 		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
@@ -62,15 +61,23 @@ int _tmain(int argc, _TCHAR* argv[])
 	}
 
 	// Get source info
-	hr = AVIFileInfo(pFile1, &fileInfo, sizeof(fileInfo));
+	hr=AVIFileInfo(pFile1,&fileInfo,sizeof(fileInfo));
 	if(hr != AVIERR_OK) { 
 		errMsg("Unable to get info from %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
-	nStreams = fileInfo.dwStreams;
+	nStreams=fileInfo.dwStreams;
 	printf("\nInput: %s\n\n", aviFileName1);
 	printFileInfo(fileInfo);
+
+	// Open destination file
+	hr=AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
+	if(hr != AVIERR_OK) { 
+		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
+			aviFileName2, hr, getErrorCode(hr)); 
+		goto ABORT; 
+	}
 
 	// Allocate the streams
 	if(nStreams <= 0) {
@@ -83,18 +90,11 @@ int _tmain(int argc, _TCHAR* argv[])
 		goto ABORT;
 	}
 
-	// Allocate the opts
-	pOpts = new LPAVICOMPRESSOPTIONS[nStreams];
-	if(!pStreams) {
-		errMsg("Cannot allocate streams array"); 
-		goto ABORT;
-	}
-
 	// Loop over streams
 	for (i = 0; i < nStreams; i++) {
 		printf("\nStream %d:\n",i);
 		pStreams[i] = NULL; 
-		hr = AVIFileGetStream(pFile1, &pStreams[i], 0L, i) ;
+		hr=AVIFileGetStream(pFile1,&pStreams[i],0L,i) ;
 		if(hr != AVIERR_OK || pStreams[i] == NULL) {
 			errMsg("Cannot open stream %d [Error 0x%08x %s]",
 				i, hr, getErrorCode(hr)); 
@@ -102,7 +102,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 
 		// Get stream info
-		hr = AVIStreamInfo(pStreams[i], &streamInfo, sizeof(streamInfo)); 
+		hr=AVIStreamInfo(pStreams[i],&streamInfo,sizeof(streamInfo)); 
 		if(hr != AVIERR_OK) { 
 			errMsg("Unable to get stream info for stream %d [Error 0x%08x %s]",
 				i, hr, getErrorCode(hr)); 
@@ -110,105 +110,101 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 		printStreamInfo(streamInfo);
 
-		// Create the AVICOMPRESSOPTIONS
-		pOpts[i] = new  AVICOMPRESSOPTIONS;
-		ZeroMemory(pOpts[i], sizeof(AVICOMPRESSOPTIONS));
-		//(*pOpts[i]).fccType = streamInfo.fccType;
-
-#if 0
-		if(i == 0) {
-			// Print AVICOMPRESSOPTIONS
-			printf("\n  Default AVICOMPRESSOPTIONS\n");
-			printCompressOptions(*pOpts[i]);
-		
-#endif
-
 		if (streamInfo.fccType == streamtypeVIDEO) { 
 			printf("\n  Processing VIDEO\n");
-			// Create a new empty editable stream
-			PAVISTREAM pStream2 = NULL;
-#if 1
-			hr = CreateEditableStream(&pStream2, NULL);
-			if(hr != AVIERR_OK) { 
-				errMsg("Unable to get create new video stream [Error 0x%08x %s]",
-					i, hr, getErrorCode(hr)); 
-				continue;
-			}
-#endif
-#if 0
-			hr = AVIStreamCreate(&pStream2, 0, 0, NULL);
-#endif
-			if(hr != AVIERR_OK) { 
-				errMsg("Unable to get create new video stream [Error 0x%08x %s]",
+			hr = decompressVideo(pFile2, pStreams[i], NULL);
+			//hr = copyStream(pFile2, pStreams[i]);
+			if(hr != AVIERR_OK) {
+				errMsg("Convert failed [Error 0x%08x %s]",
 					hr, getErrorCode(hr)); 
-				continue;
+				goto ABORT; 
 			}
-			hr = decompressVideo(pStreams[i], pStream2);
-			if(hr != AVIERR_OK) { 
-				errMsg("Unable to convert video [Error 0x%08x %s]",
-					i, hr, getErrorCode(hr)); 
-				continue;
-			}
-			// ????????????????????????????????????????????????????????????????????????????
-			AVIStreamRelease(pStream2);
-			pStreams[i] = pStream2;
 			continue;
 		} else if (streamInfo.fccType == streamtypeAUDIO) { 
 			printf("\n  Processing AUDIO\n");
-			printf("    Doing nothing, input stream will be used\n");
+			hr = copyStream(pFile2, pStreams[i]);
+			if(hr != AVIERR_OK) {
+				errMsg("Copy failed");
+				goto ABORT; 
+			}
 			continue;
 		}  else if (streamInfo.fccType == streamtypeMIDI) {  
 			printf("\n  Processing MIDI\n");
-			printf("    Doing nothing, input stream will be used\n");
+			hr = copyStream(pFile2, pStreams[i]);
+			if(hr != AVIERR_OK) {
+				errMsg("Copy failed");
+				goto ABORT; 
+			}
 			continue;
 		}  else if (streamInfo.fccType == streamtypeTEXT) {  
 			printf("\n  Processing TEXT\n");
-			printf("    Doing nothing, input stream will be used\n");
+			hr = copyStream(pFile2, pStreams[i]);
+			if(hr != AVIERR_OK) {
+				errMsg("Copy failed");
+				goto ABORT; 
+			}
 			continue;
 		} else {
-			printf("\n  Processing unknown fccType [");
+			printf("\n  Processing unknown fccType [%d]\n",streamInfo.fccType);
+			hr = copyStream(pFile2, pStreams[i]);
+			if(hr != AVIERR_OK) {
+				errMsg("Copy failed");
+				goto ABORT; 
+			}
+			printf("\n Unknown fccType [");
 			printFourCcCode(streamInfo.fccType, "]\n");
-			printf("    Doing nothing, input stream will be used\n");
+			printf("]\n");
 			continue;
 		}
 	}
-
-	// Save the file
-	printf("\nSaving file...\n");
-	hr = AVISaveV(aviFileName2, NULL, NULL, nStreams, pStreams, pOpts);
-	if(hr != AVIERR_OK) {
-		errMsg("Error saving file [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		goto ABORT; 
-	} else {
-		printf("\nSaved %s\n", aviFileName2);
-	}
-
 	goto END;
 
-ABORT:
-	aborted = 1;
-
 END:
+	// Normal exit
+#if 0
+	printf("\nBefore AVIFileRelease:\n");
+	printFileInfo(pFile2);
+	printf("\n");
+	printAudioInfo(pFile2);
+#endif
+
 	// Close files
 	if(pFile1) AVIFileRelease(pFile1);
+	if(pFile2) AVIFileRelease(pFile2);
+
+#if 0
+	// Gets get a memory error
+	printf("\nAfter AVIFileRelease:\n");
+	printFileInfo(pFile2);
+	printf("\n");
+	printAudioInfo(pFile2);
+#endif
 
 	// Release AVIFile library 
 	if(libOpened) AVIFileExit();
 	// Free space
 	if(pStreams) delete [] pStreams;
-
-	if(aborted) {
-		printf("\nAborted\n");
-	} else {
-		printf("\nAll done\n");
-	}
-
+	printf("\nAll done\n");
 	// Wait for a prompt so the console doesn't go away
 	printf("Type return to continue:\n");
 	_gettchar();
+	return 0;
 
-	return aborted;
+ABORT:
+	// Abnormal exit
+	// Close files
+	if(pFile1) AVIFileRelease(pFile1);
+	if(pFile2) AVIFileRelease(pFile2);
+	// Release AVIFile library 
+	if(libOpened) AVIFileExit();
+	// Free space
+	if(pStreams) delete [] pStreams;
+
+	printf("\nAborted\n");
+	// Wait for a prompt so the console doesn't go away
+	printf("Type return to continue:\n");
+	_gettchar();
+	return 1;
 }
 
 int parseCommand(int argc, char **argv) {

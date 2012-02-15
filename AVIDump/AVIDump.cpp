@@ -66,6 +66,9 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	AVIFileInit();
 	libOpened=TRUE;
 
+	// Check file size before opening the file
+	int fileLen1 = checkFileSize(aviFileName);
+
 	// Open file
 	hr=AVIFileOpen(&pFile,aviFileName,OF_SHARE_DENY_WRITE,0L); 
 	if(hr != AVIERR_OK) { 
@@ -141,6 +144,14 @@ ABORT:
 	goto CLEANUP;
 
 END:
+	printf("\nFile size: %.2f GB = %.2f MB = %.0f KB\n",
+		fileLen1/1024./1024./1024.,
+		fileLen1/1024./1024.,
+		fileLen1/1024.);
+	if(fileLen1 >= 1024*1024*1024) {
+		printf("*** Warning: File size is 1 GB or greater\n");
+	}
+
 	// Normal exit
 	if(out != NULL) {
 		printf("\nAll done\n");

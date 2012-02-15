@@ -2,12 +2,30 @@
 
 #include "stdafx.h"
 
-//#define FILE_NAME_IN "junktest.avi"
-//#define FILE_NAME_OUT "junktest.test.avi"
-//#define FILE_NAME_IN "Reel 13.avi"
-//#define FILE_NAME_OUT "Reel 13.test.avi"
-#define FILE_NAME_IN "Rapids Boating.avi"
-#define FILE_NAME_OUT "Rapids Boating.test.avi"
+#define TEST4
+
+#ifdef TEST0
+#  define FILE_NAME_IN "junktest.avi"
+#  define FILE_NAME_OUT "junktest.test.avi"
+#elif defined(TEST1)
+#  define FILE_NAME_IN "Reel 1- 4.avi"
+#  define FILE_NAME_OUT "Reel 1- 4.test.avi"
+#elif defined(TEST2)
+#  define FILE_NAME_IN "Reel 5-8.avi"
+#  define FILE_NAME_OUT "Reel 5-8.test.avi"
+#elif defined(TEST3)
+#  define FILE_NAME_IN "Reel 9-11.avi"
+#  define FILE_NAME_OUT "Reel 9-11.test.avi"
+#elif defined(TEST4)
+#  define FILE_NAME_IN "Reel 12.avi"
+#  define FILE_NAME_OUT "Reel 12.test.avi"
+#elif defined(TEST5)
+#  define FILE_NAME_IN "Reel 13.avi"
+#  define FILE_NAME_OUT "Reel 13.test.avi"
+#elif defined(TEST6)
+#  define FILE_NAME_IN "Rapids Boating.avi"
+#  define FILE_NAME_OUT "Rapids Boating.test.avi"
+#endif
 
 void testCompression() {
 	HRESULT hr;
@@ -15,7 +33,10 @@ void testCompression() {
 
 	PAVISTREAM pStream = NULL;
 	LPAVICOMPRESSOPTIONS *pOpts = NULL;
-	PAVIFILE pFile=NULL; 
+	PAVIFILE pFile = NULL;
+
+	printf("\nInput:  %s\n", FILE_NAME_IN);
+	printf("Output: %s\n", FILE_NAME_OUT);
 
 	AVIFileInit();
 
@@ -87,7 +108,7 @@ void testCompression() {
 	}
 
 	// Save the file
-	printf("\nSaving file\n");
+	printf("\nSaving file...\n");
 	hr = AVISaveV(FILE_NAME_OUT, NULL, NULL, nStreams, pStreams, pOpts);
 	if(hr != AVIERR_OK) {
 		errMsg("Error saving file [Error 0x%08x %s]",

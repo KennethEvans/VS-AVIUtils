@@ -7,7 +7,9 @@
 
 #include "stdafx.h"
 
-#if 1
+#define DEBUG_CRT 1
+
+#if DEBUG_CRT
 #  define _CRTDBG_MAP_ALLOC
 #  include <stdlib.h>
 #  include <crtdbg.h>
@@ -97,7 +99,7 @@ HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1) {
 		streamInfo1.dwSuggestedBufferSize, sizeMin, sizeMax, nSizeErrors);
 #endif
 
-#if 1
+#if DEBUG_CRT
 	OutputDebugString("\ncopyStream: before loop:\n");
 	_CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_DEBUG );
 	_CrtMemState s1;
@@ -147,7 +149,7 @@ HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1) {
 				0, NULL, NULL);
 		}
 		if(hr != AVIERR_OK) {
-#if 1
+#if DEBUG_CRT
 			// Dump memory on first error
 			if(nErrors < 1) {
 				OutputDebugString("\ncopyStream: error:\n");
@@ -187,7 +189,7 @@ CLEANUP:
 		nFramesProcessed, frameOut - AVIStreamStart(pStream1), nKeyFrames);
 	printf("  %d frame errors\n", nErrors);
 
-#if 1
+#if DEBUG_CRT
 	OutputDebugString("\ncopyStream: after loop:\n");
 	_CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_DEBUG );
 	_CrtMemState s3;

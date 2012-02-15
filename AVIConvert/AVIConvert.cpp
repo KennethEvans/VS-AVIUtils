@@ -1,6 +1,14 @@
-// AVIConvert.cpp : Defines the entry point for the console application.
+// AVIConvert.cpp : Converts AVI files stream by stream
 
 #include "stdafx.h"
+
+// Determine what will be done for processing
+// DO_DECOMPRESSION does decompressVideo, else copyStream for VIDEO
+// copyStream is used for all others besides VIDEO
+// DO_VIDEO and DO_AUDIO determine whether to do or skip VIDEO or AUDIO
+#define DO_VIDEO 1
+#define DO_DECOMPRESSION 0
+#define DO_AUDIO 1
 
 #define APP_OK 0
 #define APP_ERROR 1
@@ -52,16 +60,25 @@ int _tmain(int argc, _TCHAR* argv[])
 	AVIFileInit();
 	libOpened=TRUE;
 
+	// Check file size before opening the source file
+	int fileLen1 = checkFileSize(aviFileName1);
+
 	// Open source file
-	hr=AVIFileOpen(&pFile1,aviFileName1,OF_SHARE_DENY_WRITE,0L); 
+	hr = AVIFileOpen(&pFile1,aviFileName1,OF_SHARE_DENY_WRITE,0L); 
 	if(hr != AVIERR_OK) { 
 		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
 
+	// Print warning if the file size is < 1 GB
+	if(fileLen1 >= 1024*1024*1024) {
+		errMsg("\n*** Warning: Input file size [%.2f GB] is 1 GB or greater\n"
+			"This may cause problems", fileLen1/1024./1024./1024.);
+	}
+
 	// Get source info
-	hr=AVIFileInfo(pFile1,&fileInfo,sizeof(fileInfo));
+	hr = AVIFileInfo(pFile1,&fileInfo,sizeof(fileInfo));
 	if(hr != AVIERR_OK) { 
 		errMsg("Unable to get info from %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
@@ -72,7 +89,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	printFileInfo(fileInfo);
 
 	// Open destination file
-	hr=AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
+	hr = AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
 	if(hr != AVIERR_OK) { 
 		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
 			aviFileName2, hr, getErrorCode(hr)); 
@@ -94,7 +111,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	for (i = 0; i < nStreams; i++) {
 		printf("\nStream %d:\n",i);
 		pStreams[i] = NULL; 
-		hr=AVIFileGetStream(pFile1,&pStreams[i],0L,i) ;
+		hr = AVIFileGetStream(pFile1,&pStreams[i],0L,i) ;
 		if(hr != AVIERR_OK || pStreams[i] == NULL) {
 			errMsg("Cannot open stream %d [Error 0x%08x %s]",
 				i, hr, getErrorCode(hr)); 
@@ -102,7 +119,7 @@ int _tmain(int argc, _TCHAR* argv[])
 		}
 
 		// Get stream info
-		hr=AVIStreamInfo(pStreams[i],&streamInfo,sizeof(streamInfo)); 
+		hr = AVIStreamInfo(pStreams[i],&streamInfo,sizeof(streamInfo)); 
 		if(hr != AVIERR_OK) { 
 			errMsg("Unable to get stream info for stream %d [Error 0x%08x %s]",
 				i, hr, getErrorCode(hr)); 
@@ -111,22 +128,29 @@ int _tmain(int argc, _TCHAR* argv[])
 		printStreamInfo(streamInfo);
 
 		if (streamInfo.fccType == streamtypeVIDEO) { 
+#if DO_VIDEO
 			printf("\n  Processing VIDEO\n");
+#  if DO_COMPRESSION
 			hr = decompressVideo(pFile2, pStreams[i], NULL);
-			//hr = copyStream(pFile2, pStreams[i]);
+#  else
+			hr = copyStream(pFile2, pStreams[i]);
+#  endif
 			if(hr != AVIERR_OK) {
 				errMsg("Convert failed [Error 0x%08x %s]",
 					hr, getErrorCode(hr)); 
 				goto ABORT; 
 			}
+#endif
 			continue;
 		} else if (streamInfo.fccType == streamtypeAUDIO) { 
+#if DO_AUDIO
 			printf("\n  Processing AUDIO\n");
 			hr = copyStream(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
 			}
+#endif
 			continue;
 		}  else if (streamInfo.fccType == streamtypeMIDI) {  
 			printf("\n  Processing MIDI\n");
@@ -184,6 +208,14 @@ END:
 	if(libOpened) AVIFileExit();
 	// Free space
 	if(pStreams) delete [] pStreams;
+	// Print warning if the file size is < 1 GB
+	if(fileLen1 >= 1024*1024*1024) {
+		errMsg("\n*** Warning: Input file size [%.2f GB] is 1 GB or greater\n"
+			"This may have caused problems\n"
+			"Check the output file\n",
+			fileLen1/1024./1024./1024.);
+	}
+
 	printf("\nAll done\n");
 	// Wait for a prompt so the console doesn't go away
 	printf("Type return to continue:\n");

@@ -2,6 +2,29 @@
 
 #include "stdafx.h"
 
+// Test using the AVISTreamGet methods that get a DIB
+#define DO_GET 1
+
+// Do the decompression or skip it
+#define DO_DECOMPRESS 1
+
+// Get the stream from the pFile2 argument if true
+// Otherwise use the pStream2 stream input
+#define USE_FILE 1
+
+// Use PBITMAPINFOHEADER(AVIGETFRAMEF_BESTDISPLAYFMT) for AVIStreamGetFrameOpen
+// Overrides other output formats
+#define USE_BEST 0
+
+// Use YUY2 as the output format for AVIStreamGetFrameOpen
+#define USE_YUY2 0
+// Use current test as the output format for AVIStreamGetFrameOpen
+#define USE_TEST 1
+
+// Function prototypes
+BOOL writeDIB(int i, LPTSTR szFileName, HANDLE hDIB);
+BOOL writeDIB(LPTSTR szFileName, HANDLE hDIB);
+
 HRESULT decompressVideo(PAVIFILE pFile2, PAVISTREAM pStream1,PAVISTREAM pStream2) {
 	if(!pStream1) {
 		errMsg("decompressVideo: stream 1 is null"); 
@@ -39,50 +62,6 @@ HRESULT decompressVideo(PAVIFILE pFile2, PAVISTREAM pStream1,PAVISTREAM pStream2
 		return hr; 
 	}
 
-#if 1
-	// Try getting the frames as bitmaps
-	printf("  Getting frames as DIB\n");
-	int nGetProcessed = 0;
-	int nGetOK = 0;
-	int nGetErrors = 0;
-	int	maxGetErrors = 10;
-
-	PGETFRAME pgf = AVIStreamGetFrameOpen(pStream1, NULL);
-	if(pgf == NULL) {
-		errMsg("AVIStreamOpen failed\n");
-		goto END_GET;
-	}
-
-	LPVOID ptr = NULL;
-	for(int i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
-		nGetProcessed++;
-		ptr = AVIStreamGetFrame(pgf, i);
-		if(ptr == NULL) {
-			if(++nGetErrors < maxGetErrors) {
-				errMsg("AVIStreamGetFrame failed at frame %d",i);
-			}
-			continue;
-		}
-		nGetOK++;
-	}
-
-
-	// Close the pointer
-	hr = AVIStreamGetFrameClose(pgf);
-	if(hr != AVIERR_OK) { 
-		errMsg("AVIStreamClose failed [Error 0x%08x %s]",
-			hr, getErrorCode(hr)); 
-		goto END_GET;
-	}
-
-END_GET:
-	printf("  %d get frames processed, %d OK, %d errors\n\n",
-		nGetProcessed, nGetOK, nGetErrors);
-	//ULONG releaseCount1 = AVIStreamRelease(pStream1);
-	//printf("\n  After Stream AVIStreamRelease: release count 1 is %d\n",
-	//	releaseCount1);
-#endif
-
 	// Determine compression
 	bmih1 = bmi1.bmiHeader;
 	printBmiHeaderInfo("    ", bmih1);
@@ -109,7 +88,28 @@ END_GET:
 	printf("  Default output format:\n");
 	printBmiHeaderInfo("    ", bmih2);
 
-#if 1
+#if USE_YUY2 
+	bmih2.biCompression = mmioFOURCC('Y','U','Y','2');
+	bmih2.biBitCount = 16;
+	bmih2.biSizeImage =
+		bmih2.biWidth * bmih2.biHeight * bmih2.biBitCount / 8;
+	printf("  New output format:\n");
+	printBmiHeaderInfo("    ", bmih2);
+#elif USE_TEST
+	bmih2.biSize = sizeof(bmih2);
+	bmih2.biWidth = streamInfo1.rcFrame.right - streamInfo1.rcFrame.left;
+	bmih2.biHeight = streamInfo1.rcFrame.bottom - streamInfo1.rcFrame.top;
+	bmih2.biPlanes = 1;
+	bmih2.biBitCount = 24;
+	bmih2.biCompression = BI_RGB;
+	bmih2.biSizeImage = 0;
+	bmih2.biXPelsPerMeter = 0;
+	bmih2.biYPelsPerMeter = 0;
+	bmih2.biClrUsed = 0;
+	bmih2.biClrImportant  = 0;
+#endif
+
+#if USE_FILE
 	// Create the output stream
 	hr = AVIFileCreateStream(pFile2, &pStream2, &streamInfo1);
 	if(hr != AVIERR_OK) {
@@ -140,6 +140,63 @@ END_GET:
 		streamInfo1.dwSuggestedBufferSize, sizeMin, sizeMax, nSizeErrors);
 #endif
 
+#if DO_GET
+	// Try getting the frames as bitmaps
+	printf("  Getting frames as DIB\n");
+	int nGetProcessed = 0;
+	int nGetOK = 0;
+	int nGetErrors = 0;
+	int	maxGetErrors = 10;
+
+	// Calculate index of frame near 1 minute.
+	int minuteFrame = (int)((double)60. * streamInfo1.dwRate /
+		(double)streamInfo1.dwScale);
+	// Use NULL to use as is, otherwise specify a LPBITMAPINFOHEADER
+#if USE_BEST
+	PGETFRAME pgf = AVIStreamGetFrameOpen(pStream1,
+		PBITMAPINFOHEADER(AVIGETFRAMEF_BESTDISPLAYFMT));
+#else
+	PGETFRAME pgf = AVIStreamGetFrameOpen(pStream1, &bmih2);
+#endif
+	if(pgf == NULL) {
+		errMsg("AVIStreamGetFrameOpen failed\n");
+		goto END_GET;
+	}
+
+	LPVOID ptr = NULL;
+	for(int i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
+		nGetProcessed++;
+		ptr = AVIStreamGetFrame(pgf, i);
+		if(ptr == NULL) {
+			if(++nGetErrors < maxGetErrors) {
+				errMsg("AVIStreamGetFrame failed at frame %d",i);
+			}
+			continue;
+		}
+		if(i == minuteFrame) {
+			printf("Saving DIB for frame %d\n", i);
+			writeDIB(i, streamInfo1.szName, ptr);
+		}
+		nGetOK++;
+	}
+
+	// Close the pointer
+	hr = AVIStreamGetFrameClose(pgf);
+	if(hr != AVIERR_OK) { 
+		errMsg("AVIStreamClose failed [Error 0x%08x %s]",
+			hr, getErrorCode(hr)); 
+		goto END_GET;
+	}
+
+END_GET:
+	printf("  %d get frames processed, %d OK, %d errors\n\n",
+		nGetProcessed, nGetOK, nGetErrors);
+	//ULONG releaseCount1 = AVIStreamRelease(pStream1);
+	//printf("\n  After Stream AVIStreamRelease: release count 1 is %d\n",
+	//	releaseCount1);
+#endif
+
+#if DO_DECOMPRESS
 	// Loop over the frames
 	printf("  Processing %d frames starting at frame %d...\n",
 		streamInfo1.dwLength, AVIStreamStart(pStream1));
@@ -209,11 +266,10 @@ ABORT_FRAME:
 		nFramesProcessed++;
 	}
 
-//ERRORS:
-//	printf("More than %d errors, aborting\n", maxErrors);
-//	hrReturnVal = hr;
+	//ERRORS:
+	//	printf("More than %d errors, aborting\n", maxErrors);
+	//	hrReturnVal = hr;
 
-CLEANUP:
 	printf("\n");
 	printf("  AVIStreamStart=%d AVIStreamEnd=%d\n",
 		AVIStreamStart(pStream1), AVIStreamEnd(pStream1));
@@ -222,11 +278,17 @@ CLEANUP:
 	printf("  %d frames processed, %d frames written, %d key frames\n",
 		nFramesProcessed, frameOut - AVIStreamStart(pStream1), nKeyFrames);
 	printf("  %d frame errors\n", nErrors);
+#endif
 
-	ULONG releaseCount = AVIStreamRelease(pStream2);
-#if 1
-	printf("\n  After Stream AVIStreamRelease: release count is %d",
-		releaseCount);
+CLEANUP:
+#if USE_FILE
+	if(pStream2) {
+		ULONG releaseCount = AVIStreamRelease(pStream2);
+#  if 1
+		printf("\n  After Stream AVIStreamRelease: release count is %d",
+			releaseCount);
+#  endif
+	}
 #endif
 
 	if(hic) ICClose(hic);
@@ -237,4 +299,58 @@ CLEANUP:
 	pBuf2 = NULL;
 
 	return AVIERR_OK;
+}
+
+BOOL writeDIB(int i, LPTSTR szFileName, HANDLE hDIB) {
+	if (!szFileName || strlen(szFileName) == 0 || !hDIB) {
+		return FALSE;
+	}
+	int len = strlen(szFileName) + 1 + 8 + 4 + 1;
+	char *fileName = new char[len];
+	sprintf(fileName, "%s-%08d.bmp", szFileName, i);
+	int outLen = strlen(fileName);
+	if(outLen > len - 1) {
+		errMsg("Bad length [%d], expected %d)", outLen, len - 1);
+		return FALSE;
+	}
+	printf("Writing %s\n", fileName);
+	return writeDIB(fileName, hDIB);
+}
+
+// WriteDIB		- Writes a DIB to file
+// Returns		- TRUE on success
+// szFile		- Name of file to write to
+// hDIB			- Handle of the DIB
+BOOL writeDIB(LPTSTR szFileName, HANDLE hDIB) {
+	if (!szFileName || strlen(szFileName) == 0 || !hDIB) {
+		return FALSE;
+	}
+	FILE *file = fopen(szFileName, "wb");
+	if(!file) {
+		return FALSE;
+	}
+
+	LPBITMAPINFOHEADER lpbi = (LPBITMAPINFOHEADER)hDIB;
+	int nColors = 1 << lpbi->biBitCount;
+
+	// Fill in the fields of the file header 
+	BITMAPFILEHEADER hdr;
+	ZeroMemory(&hdr, sizeof(hdr));
+	hdr.bfType		= ((WORD) ('M' << 8) | 'B');	// is always "BM"
+	hdr.bfSize		= GlobalSize (hDIB) + sizeof( hdr );
+	hdr.bfReserved1 	= 0;
+	hdr.bfReserved2 	= 0;
+	hdr.bfOffBits		= (DWORD) (sizeof( hdr ) + lpbi->biSize +
+		nColors * sizeof(RGBQUAD));
+
+	// Write the file header 
+	fwrite(&hdr, sizeof(hdr), 1, file);
+
+	// Write the DIB header and the bits 
+	fwrite(lpbi, GlobalSize(hDIB), 1, file);
+
+	// Close the file
+	fclose(file);
+
+	return TRUE;
 }

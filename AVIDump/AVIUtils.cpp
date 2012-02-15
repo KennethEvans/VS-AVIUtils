@@ -388,3 +388,19 @@ HRESULT getNStreams(PAVIFILE pFile, DWORD *nStreams) {
 	*nStreams=fileInfo.dwStreams;
 	return AVIERR_OK;
 }
+
+int checkFileSize(char *fileName) {
+	if(!fileName) {
+		return -1;
+	}
+
+	FILE *file = fopen(fileName, "rb");
+	if(!file) {
+		return -1;
+	}
+	fseek(file, 0L, SEEK_END);
+	int len = ftell(file);
+	fseek(file, 0L, SEEK_SET);
+	fclose(file);
+	return len;
+}

@@ -20,6 +20,7 @@ void printAudioInfo(PAVIFILE pFile);
 HRESULT getBufferSizes(PAVISTREAM pStream, LONG *sizeMin, LONG *sizeMax,
 					   LONG *nErrors);
 HRESULT getNStreams(PAVIFILE pFile, DWORD *nStreams);
+int checkFileSize(char *fileName);
 
 // Function prototypes from Copy
 HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1);

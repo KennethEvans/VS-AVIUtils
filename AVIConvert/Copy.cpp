@@ -106,6 +106,7 @@ HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1) {
 	_CrtMemCheckpoint( &s1 );
 	_CrtMemDumpStatistics( &s1 );
 #endif
+
 	// Loop over the frames
 	char *pBuf1 = NULL;
 	LONG bufSize1 = 0;

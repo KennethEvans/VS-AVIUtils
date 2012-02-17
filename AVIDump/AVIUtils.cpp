@@ -389,7 +389,7 @@ HRESULT getNStreams(PAVIFILE pFile, DWORD *nStreams) {
 	return AVIERR_OK;
 }
 
-int checkFileSize(char *fileName) {
+int getFileSize(char *fileName) {
 	if(!fileName) {
 		return -1;
 	}

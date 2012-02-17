@@ -67,7 +67,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	libOpened=TRUE;
 
 	// Check file size before opening the file
-	int fileLen1 = checkFileSize(aviFileName);
+	int fileLen1 = getFileSize(aviFileName);
 
 	// Open file
 	hr=AVIFileOpen(&pFile,aviFileName,OF_SHARE_DENY_WRITE,0L); 

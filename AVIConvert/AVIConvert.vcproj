@@ -204,6 +204,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\CopyImplementation.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\SaveImplementation.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\stdafx.cpp"
 				>
 				<FileConfiguration

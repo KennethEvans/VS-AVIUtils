@@ -164,7 +164,7 @@ HRESULT decompressVideo(PAVIFILE pFile2, PAVISTREAM pStream1,PAVISTREAM pStream2
 	}
 
 	LPVOID ptr = NULL;
-	for(int i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
+	for(LONG i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
 		nGetProcessed++;
 		ptr = AVIStreamGetFrame(pgf, i);
 		if(ptr == NULL) {
@@ -212,7 +212,7 @@ END_GET:
 	DWORD maxErrors = 10;
 	DWORD nErrors = 0;
 	LONG frameOut = AVIStreamStart(pStream1);
-	for(int i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
+	for(LONG i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
 		// Find bufSize1
 		hr = AVIStreamRead(pStream1, i, 1, NULL, 0, &bufSize1, NULL);
 		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {

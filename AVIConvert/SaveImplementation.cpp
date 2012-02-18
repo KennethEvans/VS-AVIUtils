@@ -18,6 +18,10 @@
 // 2 min = 20*60*1000 = 1200000
 #define MAX_TIME 1200000
 
+// If the last keyframe is beyond this fraction of the length corresponding
+// to MAX_TIME, then end the frame just before the last keyframe
+#define KEYFRAME_FRACT .75
+
 // Global variables
 extern char aviFileName1[PATH_MAX];
 extern char aviFileName2[PATH_MAX];
@@ -148,9 +152,11 @@ int SaveImplementation() {
 				i, hr, getErrorCode(hr)); 
 			continue; 
 		}
+		// Define this for convenience
+		PAVISTREAM pStream = pStreams1[i];
 
 		// Get stream info
-		hr = AVIStreamInfo(pStreams1[i], &streamInfo, sizeof(streamInfo)); 
+		hr = AVIStreamInfo(pStream, &streamInfo, sizeof(streamInfo)); 
 		if(hr != AVIERR_OK) { 
 			errMsg("Unable to get stream info for stream %d [Error 0x%08x %s]",
 				i, hr, getErrorCode(hr)); 
@@ -167,9 +173,24 @@ int SaveImplementation() {
 		printf("\n  AVICOMPRESSOPTIONS\n");
 		printCompressOptions(*pOpts1[i]);
 
+		// Get keyframe information
+		printf("\n  Getting keyframes...\n");
+		LONG nKeyFrames = 0;
+		LONG firstKeyFrame = -1;
+		LONG lastKeyFrame = -1;
+		for(LONG f = AVIStreamStart(pStream); f < AVIStreamEnd(pStream); f++) {
+			if(AVIStreamIsKeyFrame(pStream, f)) {
+				nKeyFrames++;
+				if(firstKeyFrame < 0)  firstKeyFrame = f;
+				lastKeyFrame = f;
+			}
+		}
+		printf("    nKeyframes=%d firstKeyFrame=%d lastKeyFrame=%d\n",
+			nKeyFrames, firstKeyFrame, lastKeyFrame);
+
 		// Create the output streams as slices of the input streams
-		printf("\nCalculating slices for stream %d...\n", i);
-		PAVISTREAM pStream = pStreams1[i];
+		printf("\n  Calculating slices for stream %d...\n", i);
+		// Create an editable stream from the input stream
 		PAVISTREAM pEditStream = NULL;
 		hr = CreateEditableStream(&pEditStream, pStream);
 		if(hr != AVIERR_OK) { 
@@ -178,28 +199,103 @@ int SaveImplementation() {
 				i, hr, getErrorCode(hr)); 
 			goto ABORT; 
 		}
-		PAVISTREAM pEditStreamCopy = NULL;
+		// This will be the editable stream that will be created for each file.
+		PAVISTREAM pEditStreamFile = NULL;
 		LONG lPos = 0;
-		LONG streamMax = AVIStreamEnd(pStream) - 1;
-		LONG sliceMin = AVIStreamStart(pStream);
+		LONG streamMax = AVIStreamEnd(pEditStream) - 1;
+		LONG sliceMin = AVIStreamStart(pEditStream);
 		LONG sliceMax = 0;
+		double sliceMaxLength = (double)MAX_TIME * (double)streamInfo.dwRate /
+			(1000. * (double)streamInfo.dwScale);
 		LONG sliceLength = 0;
 		LONG sliceMinOut, sliceLengthOut;
+		LONG nearestKeyFrame;
+		int doInsertKeyFrame;
+		// Loop over files
 		for(n = 0; n < nFiles2; n++) {
+			doInsertKeyFrame = 0;
 			ppStreams2[n][i] = NULL;
-			sliceMax = AVIStreamTimeToSample(pStream, (n + 1) * MAX_TIME);
+			sliceMax = AVIStreamTimeToSample(pEditStream, (n + 1) * MAX_TIME);
 			if(sliceMax > streamMax) sliceMax = streamMax;
+			// If there are keyframes and we are not at the end and we are not
+			// just before a keyframe, then adjust
+			nearestKeyFrame = AVIStreamNearestKeyFrame(pEditStream, sliceMax);
+#if 1
+			printStreamParameters("pEditStream     ", n, i, pEditStream);
+			for(LONG j = sliceMax; j <= sliceMax; j++) {
+				LONG nearestKeyFrame1 = AVIStreamNearestKeyFrame(pEditStream, j);
+				printf("nearestKeyFrame=%d for frame %d\n",
+					nearestKeyFrame1, j);
+			}
+			LONG nNonZeroNearest = 0;
+			LONG firstNonZero = -1;
+			LONG lastNonZero = -1;
+			for(LONG j = AVIStreamStart(pEditStream); j < AVIStreamEnd(pEditStream); j++) {
+				LONG nearestKeyFrame1 = AVIStreamNearestKeyFrame(pEditStream, j);
+				if(nearestKeyFrame1 != 0) {
+					nNonZeroNearest++;
+					if(firstNonZero < 0)  firstNonZero = j;
+					lastNonZero = j;
+				}
+			}
+			printf("    nNonZeroNearest=%d firstNonZero=%d lastNonZero=%d\n",
+				nNonZeroNearest, firstNonZero, lastNonZero);
+#endif
+			if(nKeyFrames > 0 && sliceMax < streamMax &&
+				!AVIStreamIsKeyFrame(pEditStream, sliceMax + 1) &&
+				nearestKeyFrame >= 0)
+			{
+				// Handle the last frame
+				if(nearestKeyFrame > KEYFRAME_FRACT * sliceMaxLength) {
+					// We will end the slice here, otherwise go with it as is
+					printf("Changing sliceEnd from %d to %d ("
+						" before previous keyframe)\n",
+						sliceMax, nearestKeyFrame - 1);
+					sliceMax = nearestKeyFrame - 1;
+				}
+			}
+			// Handle the first frame in the slice
+			if(nKeyFrames > 0  && nearestKeyFrame >= 0) {
+				if(!AVIStreamIsKeyFrame(pEditStream, sliceMin)) {
+					// The first frame is not a key frame so make it one
+					doInsertKeyFrame = 1;
+					// Use the first one before the first frame
+					nearestKeyFrame = AVIStreamNearestKeyFrame(pEditStream,
+						sliceMin);
+					if(nearestKeyFrame < 0) {
+						printf("Beginning is not a kayframe and cannot"
+							" find a keyframe to insert\n");
+					} else {
+						printf("Inserting the keyframe at %d to the beginning\n",
+							nearestKeyFrame);
+					}
+				}
+			}
+			// Copy the slice to pEditStreamFile
 			sliceLength = sliceMax - sliceMin + 1;
 			sliceMinOut = sliceMin;
 			sliceLengthOut = sliceLength;
 			hr = EditStreamCopy(pEditStream, &sliceMinOut, &sliceLengthOut,
-				&pEditStreamCopy);
+				&pEditStreamFile);
 			if(hr != AVIERR_OK) { 
 				errMsg("Unable to get slice for stream %d file %d"
 					" [Error 0x%08x %s]",
 					i, n, hr, getErrorCode(hr)); 
 				goto ABORT; 
 			}
+#if 1
+			// DEBUG
+			printf("\n  Slice for file %d:\n"
+					"    nearestKeyFrame=%d\n"
+					"    sliceMax=%d streamMax=%d\n"
+					"    sliceMin=%d sliceMinOut=%d\n"
+					"    sliceLength=%d sliceLengthOut=%d\n"
+					"    doInsertKeyFrame=%d  sliceMaxLength=%.2f\n", 
+					n, nearestKeyFrame,
+					sliceMax, streamMax, sliceMin, sliceMinOut,
+					sliceLength, sliceLengthOut,
+					doInsertKeyFrame, sliceMaxLength);
+#endif
 			if(sliceMinOut != sliceMin || sliceLengthOut != sliceLength) {
 				errMsg("Error getting slice for stream %d file %d:\n"
 					"  streamMax=%d, sliceMin=%d sliceMinOut=%d,"
@@ -208,28 +304,56 @@ int SaveImplementation() {
 					sliceLength, sliceLengthOut);
 				goto ABORT; 
 			}
-			ppStreams2[n][i] = pEditStreamCopy;
+			// Handle first frame is not a keyframe
+			if(doInsertKeyFrame) {
+				LONG start1 = nearestKeyFrame;
+				LONG length1 = 1;
+				// Put it at the beginning
+				LONG start2 = 0;
+				LONG length2 = 1;
+				hr = EditStreamPaste(pEditStreamFile, &start2, &length2,
+					pEditStream, start1, length1);
+				if(hr != AVIERR_OK) { 
+					errMsg("Unable to insert keyframe for stream %d file %d"
+						" [Error 0x%08x %s]",
+						i, n, hr, getErrorCode(hr)); 
+					goto ABORT; 
+				} else {
+					printf("Added keyframe from original position %d"
+						" to position %d in split stream\n",
+						start1, start2);
+				}
+			}
+			ppStreams2[n][i] = pEditStreamFile;
 			sliceMin = sliceMax + 1;
-			printStreamParameters("pEditStream     ", n, i, pEditStream);
-			printStreamParameters("pEditStreamCopy ", n, i, pEditStreamCopy);
-			//AVIStreamRelease(pEditStreamCopy);
-		}
-		AVIStreamRelease(pEditStream);
 #if 1
-		printf("\nStream Parameters\n");
+			printStreamParameters("    pEditStream     ", n, i, pEditStream);
+			printStreamParameters("    pEditStreamFile ", n, i, pEditStreamFile);
+#endif
+		}
+		// We are through with the editable stream created for this stream
+		AVIStreamRelease(pEditStream);
+		pEditStream = NULL;
+#if 1
+		printf("\n  Outout Stream Parameters for stream %d\n", i);
 		for(n = 0; n < nFiles2; n++) {
-			printStreamParameters("", n, i, ppStreams2[n][i]);
+			printStreamParameters("    ", n, i, ppStreams2[n][i]);
 		}
 #endif
-		//// Release the streams for all the files
-		//// Do this here so we can use them for debugging
-		//for(n = 0; n < nFiles2; n++) {
-		//	AVIStreamRelease(ppStreams2[n][i]);
-		//}
+		// Do not release the new streams here
+		// AVIFileSaveV will not work
+#if 0
+		// Release the streams for all the files
+		// Do this here so we can use them for debugging
+		for(n = 0; n < nFiles2; n++) {
+			AVIStreamRelease(ppStreams2[n][i]);
+		}
+#endif
 	}
 
 	// Save the file(s)
 #if SAVE_SINGLE_FILE
+	// Save as a single file without breaking into slices
 	printf("\nSaving single file...\n");
 	hr = AVISaveV(aviFileName2, NULL, NULL, nStreams, pStreams1, pOpts1);
 	if(hr != AVIERR_OK) {
@@ -240,17 +364,20 @@ int SaveImplementation() {
 		printf("\nSaved %s\n", aviFileName2);
 	}
 #else
+	// Save the slices
 	printf("\nSaving file(s)...\n");
 	for(n = 0; n < nFiles2; n++) {
 		printf("\nSaving %s...\n", ppFileNames2[n]);
 #if 0
+		// Print the nAVICOMPRESSOPTIONS for debugging
 		for(i = 0; i < nStreams; i++) {
 			printf("\nAVICOMPRESSOPTIONS for stream %d\n", i);
 			printCompressOptions(*pOpts1[i]);
 			printf("\n");
 		}
 #endif
-#if 1
+#if 0
+		// Print the AVISTREAMINFO for debugging
 		for(i = 0; i < nStreams; i++) {
 			printf("\nAVISTREAMINFO for stream %d\n", i);
 			printStreamInfo(ppStreams2[n][i]);
@@ -321,7 +448,8 @@ CLEANUP:
 
 void printStreamParameters(char* prefix, int iFile, int iStream, PAVISTREAM pStream) {
 	printf(prefix);
-	printf("%2d %2d ", iFile, iFile);
+	// Note this is reversed from the arguments and the order of the array indices
+	printf("stream=%d file=%d ", iStream, iFile);
 	if(pStream == NULL) {
 		printf("NULL\n");
 	} else {

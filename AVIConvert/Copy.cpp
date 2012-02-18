@@ -118,7 +118,7 @@ HRESULT copyStream(PAVIFILE pFile2, PAVISTREAM pStream1) {
 	DWORD maxErrors = 10;
 	DWORD nErrors = 0;
 	LONG frameOut = AVIStreamStart(pStream1);
-	for(int i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
+	for(LONG i = AVIStreamStart(pStream1); i < AVIStreamEnd(pStream1); i++) {
 		// Find the size for bufSize1
 		hr = AVIStreamRead(pStream1, i, 1, NULL, 0, &bufSize1, NULL);
 		if(hr != AVIERR_OK && hr != AVIERR_ERROR) {

@@ -1,5 +1,7 @@
 #include "stdafx.h"
 
+#include <sys/stat.h>
+
 // Global variables
 char errorString[1024];  // Danger fixed size
 
@@ -22,6 +24,12 @@ char *getWindowsErrorCode(HRESULT hr) {
 
 	LocalFree(lpMsgBuf);
 	return errorString;
+}
+
+/// Get Windows error codes using GetLastError()
+char *getWindowsLastErrorCode() {
+	DWORD dw = GetLastError();
+	return getWindowsErrorCode(dw);
 }
 
 /// Function to return the names of AVIERR codes.  (Built from Vfw.h).
@@ -93,8 +101,8 @@ void printFileInfo(PAVIFILE pFile) {
 		return;
 	}
 	AVIFILEINFO fileInfo;
-	HRESULT hr=AVIFileInfo(pFile,&fileInfo,sizeof(fileInfo));
-	if(hr != 0) { 
+	HRESULT hr = AVIFileInfo(pFile,&fileInfo,sizeof(fileInfo));
+	if(hr != AVIERR_OK) { 
 		errMsg("Unable to get file info [Error 0x%08x %s]",
 			hr, getErrorCode(hr)); 
 		return; 
@@ -139,7 +147,7 @@ void printStreamInfo(PAVISTREAM pStream) {
 	}
 	AVISTREAMINFO streamInfo;
 	HRESULT hr=AVIStreamInfo(pStream, &streamInfo, sizeof(streamInfo)); 
-	if(hr != 0) { 
+	if(hr != AVIERR_OK) { 
 		errMsg("Unable to get stream info [Error 0x%08x %s]",
 			hr, getErrorCode(hr)); 
 		return; 
@@ -186,6 +194,41 @@ void printStreamInfo(AVISTREAMINFO pStream) {
 	printf("  EditCount: %d\n",pStream.dwEditCount);
 	printf("  FormatChangeCount: %d\n",pStream.dwFormatChangeCount);
 	printf("  Name: %s\n",pStream.szName);
+}
+
+
+void printKeyFrameInfo(char *prefix, PAVISTREAM pStream) {
+	// Get keyframe information
+	LONG nKeyFrames = 0;
+	LONG firstKeyFrame = -1;
+	LONG lastKeyFrame = -1;
+	// Keyframes that give -1 for AVIStreamNearestKeyFrame
+	LONG nBadNearest = 0;
+	LONG firstBadNearest = -1;
+	LONG lastBadNearest = -1;
+	LONG nearestKeyFrame = -1;
+	LONG start = AVIStreamStart(pStream);
+	LONG end = AVIStreamEnd(pStream) - 1;
+	for(LONG f = start; f <= end; f++) {
+		if(AVIStreamIsKeyFrame(pStream, f)) {
+			nKeyFrames++;
+			if(firstKeyFrame < 0)  firstKeyFrame = f;
+			lastKeyFrame = f;
+		}
+		// Check if AVIStreamNearestKeyFrame is working
+		nearestKeyFrame = AVIStreamNearestKeyFrame(pStream, f);
+		if(nearestKeyFrame == -1) {
+			nBadNearest++;
+			if(firstBadNearest < 0)  firstBadNearest = f;
+			lastBadNearest = f;
+		}
+	}
+	printf("%sstartFrame=%d endFrame=%d length=%d\n",
+		prefix, start, end, end - start + 1);
+	printf("%snKeyframes=%d firstKeyFrame=%d lastKeyFrame=%d\n",
+		prefix, nKeyFrames, firstKeyFrame, lastKeyFrame);
+	printf("%snBadNearest=%d firstBadNearest=%d lastBadNearest=%d\n",
+		prefix, nBadNearest, firstBadNearest, lastBadNearest);
 }
 
 void printBmiHeaderInfo(char *prefix, BITMAPINFOHEADER bih) {
@@ -382,25 +425,32 @@ HRESULT getNStreams(PAVIFILE pFile, DWORD *nStreams) {
 	// Get file info
 	AVIFILEINFO fileInfo; 
 	HRESULT hr=AVIFileInfo(pFile, &fileInfo, sizeof(fileInfo));
-	if(hr != 0) {
+	if(hr != AVIERR_OK) {
 		return hr;
 	}
 	*nStreams=fileInfo.dwStreams;
 	return AVIERR_OK;
 }
 
-int getFileSize(char *fileName) {
+/// Get the length of the file as a double.  Returns -1 on error.
+/// Avoids problems with LONG_MAX ~ 2 GB, ULONG_MAX ~ 4 GB, etc.
+double getFileSize(char *fileName) {
 	if(!fileName) {
 		return -1;
 	}
 
-	FILE *file = fopen(fileName, "rb");
-	if(!file) {
+	HANDLE hFile = CreateFile(fileName, GENERIC_READ, FILE_SHARE_READ,
+		NULL, OPEN_EXISTING, 0, NULL);
+	if(hFile == INVALID_HANDLE_VALUE) {
+		return -1;
+    }
+
+	LARGE_INTEGER lpFileSize;
+	BOOL bRetVal = GetFileSizeEx(hFile, &lpFileSize);
+	CloseHandle(hFile);
+	if(!bRetVal) {
 		return -1;
 	}
-	fseek(file, 0L, SEEK_END);
-	int len = ftell(file);
-	fseek(file, 0L, SEEK_SET);
-	fclose(file);
-	return len;
+
+	return (double)lpFileSize.QuadPart;
 }

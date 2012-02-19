@@ -9,6 +9,9 @@
 #define OUTPUT_FILE "AVIDump.txt"
 #define DEBUG 0
 
+// Print keyframe info, takes time to loop over frames
+#define DO_KEYFRAMES 1
+
 // Function prototypes
 int parseCommand(int argc, char **argv);
 void usage(void);
@@ -18,6 +21,7 @@ extern char errorString[1024];  // Danger fixed size
 
 // Global variables
 int useFile = 0;
+int doKeyFrames = DO_KEYFRAMES;
 
 int _tmain(int argc, _TCHAR* argv[]) {
 	HRESULT hr; 
@@ -30,6 +34,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 	int nStreams=0;
 	char *fileName = NULL;
 	FILE *out = NULL;
+	int retCode = APP_OK;
 
 	// Title
 	printf("\nAVIDump\n");
@@ -60,14 +65,13 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		printf("\nAVIDump\n");
 	}
 
-	printf("\n%s\n\n",aviFileName);
+	printf("\n%s\n\n", aviFileName);
 
 	// Initialize library
 	AVIFileInit();
 	libOpened=TRUE;
 
-	// Check file size before opening the file
-	int fileLen1 = getFileSize(aviFileName);
+	double fileLen1 = getFileSize(aviFileName);
 
 	// Open file
 	hr=AVIFileOpen(&pFile,aviFileName,OF_SHARE_DENY_WRITE,0L); 
@@ -114,6 +118,13 @@ int _tmain(int argc, _TCHAR* argv[]) {
 		}
 		printStreamInfo(streamInfo);
 
+
+		// Print keyframe info
+		if(doKeyFrames) {
+			printf("\n  Keyframes\n");
+			printKeyFrameInfo("    ", pStreams[i]);
+		}
+
 		// Handle specific types
 		if (streamInfo.fccType == streamtypeVIDEO) { 
 			getBitmapInfo(pStreams[i]);
@@ -135,6 +146,7 @@ int _tmain(int argc, _TCHAR* argv[]) {
 
 ABORT:
 	// Abnormal exit
+	retCode = -1;
 	if(out != NULL) {
 		printf("\nAborted\n");
 		out = freopen("CON", "w", stdout);
@@ -144,12 +156,16 @@ ABORT:
 	goto CLEANUP;
 
 END:
-	printf("\nFile size: %.2f GB = %.2f MB = %.0f KB\n",
-		fileLen1/1024./1024./1024.,
-		fileLen1/1024./1024.,
-		fileLen1/1024.);
-	if(fileLen1 >= 1024*1024*1024) {
-		printf("*** Warning: File size is 1 GB or greater\n");
+	if(fileLen1 < 0) {
+		printf("\nCannot determine file size\n");
+	} else {
+		printf("\nFile size: %.2f GB = %.2f MB = %.0f KB\n",
+			fileLen1/1024./1024./1024.,
+			fileLen1/1024./1024.,
+			fileLen1/1024.);
+		if(fileLen1 >= 1024*1024*1024) {
+			printf("*** Warning: File size is 1 GB or greater\n");
+		}
 	}
 
 	// Normal exit
@@ -172,7 +188,8 @@ CLEANUP:
 	// Wait for a prompt so the console doesn't go away
 	printf("Type return to continue:\n");
 	_gettchar();
-	return 1;
+
+	return retCode;
 }
 
 int parseCommand(int argc, char **argv) {

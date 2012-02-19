@@ -9,7 +9,6 @@
 
 #define PATH_MAX _MAX_PATH
 #define DEBUG 0
-#define DEBUG_KEYFRAME 0
 
 // Set this to trim the input file to eliminated frames for which
 // ACIStreamFindNextKeyframe returns -1
@@ -61,7 +60,7 @@ int SaveImplementation() {
 	libOpened=TRUE;
 
 	// Check file size before opening the source file
-	int fileLen1 = getFileSize(aviFileName1);
+	double fileLen1 = getFileSize(aviFileName1);
 
 	// Open source file
 	hr = AVIFileOpen(&pFile1, aviFileName1, OF_SHARE_DENY_WRITE, 0L); 
@@ -189,9 +188,9 @@ int SaveImplementation() {
 		LONG nKeyFrames = 0;
 		LONG firstKeyFrame = -1;
 		LONG lastKeyFrame = -1;
-		LONG nNonZeroNearest = 0;
-		LONG firstNonZeroNearest = -1;
-		LONG lastNonZeroNearest = -1;
+		LONG nBadNearest = 0;
+		LONG firstBadNearest = -1;
+		LONG lastBadNearest = -1;
 		LONG nearestKeyFrame = -1;
 		for(LONG f = AVIStreamStart(pStream); f < AVIStreamEnd(pStream); f++) {
 			if(AVIStreamIsKeyFrame(pStream, f)) {
@@ -201,16 +200,16 @@ int SaveImplementation() {
 			}
 			// Check if AVIStreamNearestKeyFrame is working
 			nearestKeyFrame = AVIStreamNearestKeyFrame(pStream, f);
-			if(nearestKeyFrame != 0) {
-				nNonZeroNearest++;
-				if(firstNonZeroNearest < 0)  firstNonZeroNearest = f;
-				lastNonZeroNearest = f;
+			if(nearestKeyFrame == -1) {
+				nBadNearest++;
+				if(firstBadNearest < 0)  firstBadNearest = f;
+				lastBadNearest = f;
 			}
 		}
 		printf("    nKeyframes=%d firstKeyFrame=%d lastKeyFrame=%d\n",
 			nKeyFrames, firstKeyFrame, lastKeyFrame);
-		printf("    nNonZeroNearest=%d firstNonZeroNearest=%d lastNonZeroNearest=%d\n",
-			nNonZeroNearest, firstNonZeroNearest, lastNonZeroNearest);
+		printf("    nBadNearest=%d firstBadNearest=%d lastBadNearest=%d\n",
+			nBadNearest, firstBadNearest, lastBadNearest);
 
 		// Create the output streams as slices of the input streams
 		printf("\n  Calculating slices for stream %d...\n", i);
@@ -227,7 +226,7 @@ int SaveImplementation() {
 
 #if TRIM_BAD_KEYFRAMES
 		PAVISTREAM pEditStreamCut = NULL;
-		LONG cutStart = firstNonZeroNearest;
+		LONG cutStart = firstBadNearest;
 		LONG cutEnd = streamMax;
 		LONG cutLength = cutEnd - cutStart + 1;
 		hr = EditStreamCut(pEditStream, &cutStart, &cutLength,
@@ -282,28 +281,6 @@ int SaveImplementation() {
 			// If there are keyframes and we are not at the end and we are not
 			// just before a keyframe, then adjust
 			nearestKeyFrame = AVIStreamNearestKeyFrame(pEditStream, sliceMax);
-#if DEBUG_KEYFRAME
-			// DEBUG
-			printStreamParameters("pEditStream     ", n, i, pEditStream);
-			for(LONG j = sliceMax; j <= sliceMax; j++) {
-				LONG nearestKeyFrame1 = AVIStreamNearestKeyFrame(pEditStream, j);
-				printf("nearestKeyFrame=%d for frame %d\n",
-					nearestKeyFrame1, j);
-			}
-			LONG nNonZeroNearest = 0;
-			LONG firstNonZeroNearest = -1;
-			LONG firstNonZeroNearest = -1;
-			for(LONG j = AVIStreamStart(pEditStream); j < AVIStreamEnd(pEditStream); j++) {
-				LONG nearestKeyFrame1 = AVIStreamNearestKeyFrame(pEditStream, j);
-				if(nearestKeyFrame1 != 0) {
-					nNonZeroNearest++;
-					if(firstNonZeroNearest < 0)  firstNonZeroNearest = j;
-					firstNonZeroNearest = j;
-				}
-			}
-			printf("    nNonZeroNearest=%d firstNonZeroNearest=%d firstNonZeroNearest=%d\n",
-				nNonZeroNearest, firstNonZeroNearest, firstNonZeroNearest);
-#endif
 			if(nKeyFrames > 0 && sliceMax < streamMax &&
 				!AVIStreamIsKeyFrame(pEditStream, sliceMax + 1) &&
 				nearestKeyFrame >= 0)
@@ -494,7 +471,7 @@ int SaveImplementation() {
 				hr, getErrorCode(hr)); 
 			goto ABORT; 
 		}
-		int fileLen2 = getFileSize(ppFileNames2[n]);
+		double fileLen2 = getFileSize(ppFileNames2[n]);
 		if(fileLen2 == -1) {
 			printf("  Error getting file size\n");
 		} else {

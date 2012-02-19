@@ -41,7 +41,7 @@ int CopyImplementation() {
 	libOpened=TRUE;
 
 	// Check file size before opening the source file
-	int fileLen1 = getFileSize(aviFileName1);
+	DWORD fileLen1 = getFileSize(aviFileName1);
 
 	// Open source file
 	hr = AVIFileOpen(&pFile1,aviFileName1,OF_SHARE_DENY_WRITE,0L); 

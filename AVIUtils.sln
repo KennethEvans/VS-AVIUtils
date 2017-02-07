@@ -1,17 +1,14 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 10.00
-# Visual Studio 2008
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVIConvert", "AVIConvert\AVIConvert.vcproj", "{684F950F-2D1F-4908-8DB7-E11C8271445B}"
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVIConvert", "AVIConvert\AVIConvert.vcxproj", "{684F950F-2D1F-4908-8DB7-E11C8271445B}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVIDump", "AVIDump\AVIDump.vcproj", "{48130B96-1D86-4B30-A353-55D414509F12}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVIDump", "AVIDump\AVIDump.vcxproj", "{48130B96-1D86-4B30-A353-55D414509F12}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVITest", "AVITest\AVITest.vcproj", "{9A89E996-4662-43B4-905F-F75D6F8DA36F}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AVITest", "AVITest\AVITest.vcxproj", "{9A89E996-4662-43B4-905F-F75D6F8DA36F}"
 EndProject
 Global
-	GlobalSection(SubversionScc) = preSolution
-		Svn-Managed = True
-		Manager = AnkhSVN - Subversion Support for Visual Studio
-	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
 		Release|Win32 = Release|Win32

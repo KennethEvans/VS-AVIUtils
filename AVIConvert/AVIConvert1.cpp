@@ -1,65 +1,71 @@
-// CopyImplementation.cpp : Provides the implementation of AVIConvert that uses
-// AVIFileCreateStream, AVIStreamRead, and AVIStreamWrite
+// AVIConvert.cpp : Defines the entry point for the console application.
 
 #include "stdafx.h"
 
-// Determine what will be done for processing
-// DO_DECOMPRESSION does decompressVideo, else copyStream for VIDEO
-// copyStream is used for all others besides VIDEO
-// DO_VIDEO and DO_AUDIO determine whether to do or skip VIDEO or AUDIO
-#define DO_VIDEO 1
-#define DO_DECOMPRESSION 0
-#define DO_AUDIO 1
+#define APP_OK 0
+#define APP_ERROR 1
 
 #define PATH_MAX _MAX_PATH
 #define DEBUG 0
 
-// Global variables
-extern char aviFileName1[PATH_MAX];
-extern char aviFileName2[PATH_MAX];
-extern int aviFileSpecified1;
-extern int aviFileSpecified2;
-
-// Function prototypes;
-int CopyImplemetation();
+// Function prototypes
 int parseCommand(int argc, char **argv);
 void usage(void);
 
-int CopyImplementation() {
+// Global variables
+char aviFileName1[PATH_MAX];
+char aviFileName2[PATH_MAX];
+int aviFileSpecified1=0;
+int aviFileSpecified2=0;
+PAVIFILE pFile1=NULL; 
+PAVIFILE pFile2=NULL;
+PAVISTREAM *pStreams=NULL;
+
+int _tmain(int argc, _TCHAR* argv[])
+{
 	HRESULT hr; 
 	BOOL libOpened=FALSE;
-	PAVIFILE pFile1=NULL; 
-	PAVIFILE pFile2=NULL;
-	PAVISTREAM *pStreams=NULL;
 	AVIFILEINFO fileInfo;
 	AVISTREAMINFO streamInfo; 
+#if 0
+	double sps,ssps,length,slength;
+#endif
 	int i;
 	int nStreams=0;
+
+	// Title
+	printf("\nAVIConvert\n");
+
+	// Parse command line
+	if(parseCommand(argc,argv) != APP_OK) {
+		return 1;
+	}
+	if(!aviFileSpecified1) {
+		errMsg("No AVI source file specified\n");
+		goto ABORT;
+	}
+	if(!aviFileSpecified2) {
+		errMsg("No AVI destination file specified\n");
+		goto ABORT;
+	}
+	printf("\nSource: %s\n",aviFileName1);
+	printf("Dest: %s\n",aviFileName2);
 
 	// Initialize library
 	AVIFileInit();
 	libOpened=TRUE;
 
-	// Check file size before opening the source file
-	DWORD fileLen1 = getFileSize(aviFileName1);
-
 	// Open source file
-	hr = AVIFileOpen(&pFile1,aviFileName1,OF_SHARE_DENY_WRITE,0L); 
-	if(hr != AVIERR_OK) { 
+	hr=AVIFileOpen(&pFile1,aviFileName1,OF_SHARE_DENY_WRITE,0L); 
+	if(hr != 0) { 
 		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
 		goto ABORT; 
 	}
 
-	// Print warning if the file size is < 1 GB
-	if(fileLen1 >= 1024*1024*1024) {
-		errMsg("\n*** Warning: Input file size [%.2f GB] is 1 GB or greater\n"
-			"This may cause problems", fileLen1/1024./1024./1024.);
-	}
-
 	// Get source info
-	hr = AVIFileInfo(pFile1,&fileInfo,sizeof(fileInfo));
-	if(hr != AVIERR_OK) { 
+	hr=AVIFileInfo(pFile1,&fileInfo,sizeof(fileInfo));
+	if(hr != 0) { 
 		errMsg("Unable to get info from %s\n  [Error 0x%08x %s]",
 			aviFileName1, hr, getErrorCode(hr)); 
 		goto ABORT; 
@@ -69,8 +75,8 @@ int CopyImplementation() {
 	printFileInfo(fileInfo);
 
 	// Open destination file
-	hr = AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
-	if(hr != AVIERR_OK) { 
+	hr=AVIFileOpen(&pFile2, aviFileName2, OF_WRITE|OF_CREATE, 0L);
+	if(hr != 0) { 
 		errMsg("Unable to open %s\n  [Error 0x%08x %s]",
 			aviFileName2, hr, getErrorCode(hr)); 
 		goto ABORT; 
@@ -88,11 +94,12 @@ int CopyImplementation() {
 	}
 
 	// Loop over streams
+	int nFrames = 0;
+	int firstFrame = 0;
 	for (i = 0; i < nStreams; i++) {
-		// Get the stream
 		printf("\nStream %d:\n",i);
 		pStreams[i] = NULL; 
-		hr = AVIFileGetStream(pFile1, &pStreams[i], 0L, i) ;
+		hr=AVIFileGetStream(pFile1,&pStreams[i],0L,i) ;
 		if(hr != AVIERR_OK || pStreams[i] == NULL) {
 			errMsg("Cannot open stream %d [Error 0x%08x %s]",
 				i, hr, getErrorCode(hr)); 
@@ -100,8 +107,8 @@ int CopyImplementation() {
 		}
 
 		// Get stream info
-		hr = AVIStreamInfo(pStreams[i], &streamInfo, sizeof(streamInfo)); 
-		if(hr != AVIERR_OK) { 
+		hr=AVIStreamInfo(pStreams[i],&streamInfo,sizeof(streamInfo)); 
+		if(hr != 0) { 
 			errMsg("Unable to get stream info for stream %d [Error 0x%08x %s]",
 				i, hr, getErrorCode(hr)); 
 			goto ABORT; 
@@ -109,29 +116,22 @@ int CopyImplementation() {
 		printStreamInfo(streamInfo);
 
 		if (streamInfo.fccType == streamtypeVIDEO) { 
-#if DO_VIDEO
 			printf("\n  Processing VIDEO\n");
-#  if DO_COMPRESSION
-			hr = decompressVideo(pFile2, pStreams[i], NULL);
-#  else
-			hr = copyStream(pFile2, pStreams[i]);
-#  endif
+			//hr = convertVideo(pFile2, pStreams[i]);
+			hr = copyStream1(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Convert failed [Error 0x%08x %s]",
 					hr, getErrorCode(hr)); 
 				goto ABORT; 
 			}
-#endif
 			continue;
 		} else if (streamInfo.fccType == streamtypeAUDIO) { 
-#if DO_AUDIO
 			printf("\n  Processing AUDIO\n");
 			hr = copyStream(pFile2, pStreams[i]);
 			if(hr != AVIERR_OK) {
 				errMsg("Copy failed");
 				goto ABORT; 
 			}
-#endif
 			continue;
 		}  else if (streamInfo.fccType == streamtypeMIDI) {  
 			printf("\n  Processing MIDI\n");
@@ -156,9 +156,7 @@ int CopyImplementation() {
 				errMsg("Copy failed");
 				goto ABORT; 
 			}
-			printf("\n Unknown fccType [");
-			printFourCcCode(streamInfo.fccType, "]\n");
-			printf("]\n");
+			printf("  Unknown fccType [%d]\n",streamInfo.fccType);
 			continue;
 		}
 	}
@@ -189,14 +187,6 @@ END:
 	if(libOpened) AVIFileExit();
 	// Free space
 	if(pStreams) delete [] pStreams;
-	// Print warning if the file size is < 1 GB
-	if(fileLen1 >= 1024*1024*1024) {
-		errMsg("\n*** Warning: Input file size [%.2f GB] is 1 GB or greater\n"
-			"This may have caused problems\n"
-			"Check the output file\n",
-			fileLen1/1024./1024./1024.);
-	}
-
 	printf("\nAll done\n");
 	// Wait for a prompt so the console doesn't go away
 	printf("Type return to continue:\n");
@@ -218,4 +208,49 @@ ABORT:
 	printf("Type return to continue:\n");
 	_gettchar();
 	return 1;
+}
+
+int parseCommand(int argc, char **argv) {
+	for(int i=1; i < argc; i++) {
+		if (argv[i][0] == '-') {
+			switch(argv[i][1]) {
+#if 0
+			case 's':
+				doServer=1;
+				serverName=argv[++i];
+				break;
+#endif
+			case 'h':
+				usage();
+				return APP_OK;
+			default:
+				fprintf(stderr,"\n\nInvalid option: %s\n",argv[i]);
+				usage();
+				return APP_ERROR;
+			}
+		} else if(!aviFileSpecified1) {
+			strcpy(aviFileName1,argv[i]);
+			aviFileSpecified1=1;
+		} else if(!aviFileSpecified2) {
+			strcpy(aviFileName2,argv[i]);
+			aviFileSpecified2=1;
+		} else {
+			errMsg("\n\nInvalid option: %s\n",argv[i]);
+			usage();
+			return APP_ERROR;
+		}
+	}
+	return APP_OK;
+}
+
+void usage(void) {
+	printf(
+		"\nUsage: AVIConvert [Options] srcfilename destfilename\n"
+		"  Converts AVI files for Pinnacle Studio 8\n"
+		"\n"
+		"  Options:\n"
+		"    srcfilename  Name of an AVI file to convert\n"
+		"    destfilename Name of converted file\n"
+		"    -h help      This message\n"
+		);
 }
